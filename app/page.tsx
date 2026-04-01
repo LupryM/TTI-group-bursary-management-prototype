@@ -63,6 +63,47 @@ export default function HomePage() {
         {renderPortal()}
       </div>
 
+      {/* Sponsors Section */}
+      <div className="border-t border-[#E5E7EB] bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-12">
+          <h3 className="text-center text-xs font-semibold uppercase tracking-widest text-[#9CA3AF] mb-8">Our Sponsors</h3>
+          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
+            <Image
+              src="/Shell-Logo.png"
+              alt="Shell"
+              width={120}
+              height={60}
+              className="object-contain h-12 w-auto"
+              style={{ height: "48px" }}
+            />
+            <Image
+              src="/Anglo_American_plc-Logo.wine.png"
+              alt="Anglo American"
+              width={120}
+              height={60}
+              className="object-contain h-12 w-auto"
+              style={{ height: "48px" }}
+            />
+            <Image
+              src="/Sasol-Logo.wine.png"
+              alt="Sasol"
+              width={120}
+              height={60}
+              className="object-contain h-12 w-auto"
+              style={{ height: "48px" }}
+            />
+            <Image
+              src="/nedbank-logo-png-transparent.png"
+              alt="Nedbank"
+              width={120}
+              height={60}
+              className="object-contain h-12 w-auto"
+              style={{ height: "48px" }}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Footer */}
       <footer className="border-t border-[#E5E7EB] bg-slate-900 mt-auto">
         <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
