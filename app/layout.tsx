@@ -12,21 +12,8 @@ export const metadata: Metadata = {
   description: 'TTI Group – B-BBEE Level 1 bursary and skills development management platform for South African enterprises and students.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/tti-bursary-management-logo.png',
+    apple: '/tti-bursary-management-logo.png',
   },
 }
 
