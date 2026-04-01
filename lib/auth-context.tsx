@@ -57,6 +57,15 @@ export const MOCK_USERS: MockUser[] = [
     status: "Under Review",
   },
   {
+    id: "funder-0",
+    name: "Michael Chen",
+    email: "michael@shell.com",
+    role: "funder",
+    company: "Shell South Africa",
+    bbbeeLevel: 1,
+    totalBudget: 4000000,
+  },
+  {
     id: "funder-1",
     name: "Priya Naidoo",
     email: "priya@angloamerican.com",
@@ -73,6 +82,15 @@ export const MOCK_USERS: MockUser[] = [
     company: "Sasol Bursaries",
     bbbeeLevel: 1,
     totalBudget: 1800000,
+  },
+  {
+    id: "funder-3",
+    name: "Aisha Patel",
+    email: "aisha@nedbank.co.za",
+    role: "funder",
+    company: "Nedbank Foundation",
+    bbbeeLevel: 2,
+    totalBudget: 1200000,
   },
   {
     id: "admin-1",

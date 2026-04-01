@@ -64,7 +64,7 @@ export default function HomePage() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-[#E5E7EB] bg-white mt-auto">
+      <footer className="border-t border-[#E5E7EB] bg-slate-900 mt-auto">
         <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           {/* Logo + tagline */}
           <div className="flex items-center gap-3">
@@ -78,14 +78,14 @@ export default function HomePage() {
             />
           </div>
           {/* Legal */}
-          <p className="text-[10px] text-[#9CA3AF] font-sans">
+          <p className="text-[10px] text-gray-300 font-sans">
             &copy; {new Date().getFullYear()} TTI Group. All rights reserved.&nbsp;&nbsp;&bull;&nbsp;&nbsp;
             Privacy Policy&nbsp;&nbsp;&bull;&nbsp;&nbsp;POPIA Compliant
           </p>
           {/* Contact */}
           <div className="text-right">
-            <p className="text-[10px] text-[#6B7280] font-sans">info@ttibursaries.co.za</p>
-            <p className="text-[10px] text-[#6B7280] font-sans">+27 (0) 10 746 4366</p>
+            <p className="text-[10px] text-gray-300 font-sans">info@ttibursaries.co.za</p>
+            <p className="text-[10px] text-gray-300 font-sans">+27 (0) 10 746 4366</p>
           </div>
         </div>
       </footer>
