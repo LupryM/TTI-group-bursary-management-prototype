@@ -1,9 +1,18 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { ANGLO_STUDENTS, formatZAR, progressPct, FunderStudent } from "@/lib/mock-data"
 import type { FunderView } from "@/components/nav-bar"
+
+// Map funder names to logo files
+const SPONSOR_LOGOS: Record<string, string> = {
+  "Shell South Africa": "/Shell-Logo.png",
+  "Anglo American plc": "/Anglo_American_plc-Logo.wine.png",
+  "Sasol Bursaries": "/Sasol-Logo.wine.png",
+  "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
+}
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -60,9 +69,20 @@ function FunderOverview() {
           <div className="w-1.5 bg-[#F5A623] flex-shrink-0" aria-hidden="true" />
           <div className="px-6 sm:px-8 py-6 flex-1 min-w-0">
             <p className="text-[10px] tracking-widest uppercase text-white/50 mb-1">Funder Portal — 2026 Academic Year</p>
-            <h1 className="text-xl sm:text-2xl font-serif font-semibold text-white">
-              Welcome, {user.name.split(" ")[0]}
-            </h1>
+            <div className="flex items-center gap-3 mb-3">
+              {user.company && SPONSOR_LOGOS[user.company] && (
+                <Image
+                  src={SPONSOR_LOGOS[user.company]}
+                  alt={user.company}
+                  width={60}
+                  height={40}
+                  className="object-contain h-10 w-auto"
+                />
+              )}
+              <h1 className="text-xl sm:text-2xl font-serif font-semibold text-white">
+                Welcome, {user.name.split(" ")[0]}
+              </h1>
+            </div>
             <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl">
               Manage your bursary fund for <span className="text-[#F5A623] font-medium">{user.company}</span>. Monitor student progress, disbursements, and B-BBEE compliance in one place.
             </p>

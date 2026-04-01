@@ -1,9 +1,18 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { ALL_APPLICATIONS, ANGLO_STUDENTS, formatZAR, progressPct, Application } from "@/lib/mock-data"
 import type { AdminView } from "@/components/nav-bar"
+
+// Map funder names to logo files
+const SPONSOR_LOGOS: Record<string, string> = {
+  "Shell South Africa": "/Shell-Logo.png",
+  "Anglo American plc": "/Anglo_American_plc-Logo.wine.png",
+  "Sasol Bursaries": "/Sasol-Logo.wine.png",
+  "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
+}
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
@@ -497,8 +506,14 @@ function AdminFunders() {
       <div className="flex flex-col gap-4">
         {funders.map((f) => (
           <div key={f.id} className="bg-white border border-[#E5E7EB] rounded-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="w-10 h-10 bg-[#1A2B4A] text-white rounded-sm flex items-center justify-center text-xs font-bold font-sans flex-shrink-0">
-              {f.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            <div className="w-12 h-12 bg-white flex-shrink-0">
+              <Image
+                src={SPONSOR_LOGOS[f.name] || "/placeholder-logo.svg"}
+                alt={f.name}
+                width={48}
+                height={48}
+                className="object-contain w-full h-full"
+              />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
