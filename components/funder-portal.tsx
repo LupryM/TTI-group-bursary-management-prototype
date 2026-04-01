@@ -133,6 +133,7 @@ function FunderOverview() {
       <section>
         <SectionHeader>Student Snapshot</SectionHeader>
         <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm font-sans min-w-[600px]" role="table">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-[#F5F6F8]">
@@ -174,6 +175,7 @@ function FunderOverview() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </section>
     </main>

@@ -86,7 +86,7 @@ function AdminApplications() {
           role="status"
           aria-live="polite"
           className={[
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-sm shadow-lg text-sm font-sans font-semibold border",
+            "fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto z-50 flex items-center gap-2 px-4 py-3 rounded-sm shadow-lg text-sm font-sans font-semibold border",
             toast.type === "success"
               ? "bg-white border-emerald-300 text-emerald-700"
               : "bg-white border-red-300 text-red-600",
@@ -327,7 +327,7 @@ function AdminSkillsTracker() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
       {toast && (
-        <div role="status" aria-live="polite" className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-white border border-emerald-300 text-emerald-700 rounded-sm shadow-lg text-sm font-semibold font-sans">
+        <div role="status" aria-live="polite" className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto z-50 flex items-center gap-2 px-4 py-3 bg-white border border-emerald-300 text-emerald-700 rounded-sm shadow-lg text-sm font-semibold font-sans">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
             <path d="M2 7.5L5.5 11L12 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -489,7 +489,7 @@ function AdminFunders() {
       </div>
 
       {/* Summary KPIs */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {[
           { label: "Total Funders", value: String(funders.length) },
           { label: "Total Budget Managed", value: formatZAR(funders.reduce((a, f) => a + f.budget, 0)) },
