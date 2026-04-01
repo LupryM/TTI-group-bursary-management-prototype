@@ -74,7 +74,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
     <header className="w-full bg-white border-b border-[#E5E7EB] sticky top-0 z-40">
       {/* Utility bar */}
       <div className="bg-[#1A2B4A]">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-8">
           <span className="text-[10px] text-white/50 tracking-widest uppercase font-sans">
             B-BBEE Level 1 &mdash; Skills Development &amp; Bursary Management
           </span>
@@ -85,7 +85,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
       </div>
 
       {/* Main nav */}
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <button
@@ -198,6 +198,21 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
           role="navigation"
           aria-label="Mobile navigation"
         >
+          {/* User identity — only visible on xs where the pill is hidden */}
+          <div className="sm:hidden flex items-center gap-3 px-6 py-3 border-b border-[#E5E7EB] bg-[#F5F6F8]">
+            <div
+              className="w-7 h-7 rounded-full bg-[#1A2B4A] text-white flex items-center justify-center text-[10px] font-bold font-sans flex-shrink-0"
+              aria-hidden="true"
+            >
+              {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="text-xs font-semibold text-[#1A1A2E] font-sans">{user.name}</span>
+              <span className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-px rounded-sm mt-0.5 w-fit font-sans ${ROLE_COLORS[user.role]}`}>
+                {ROLE_LABELS[user.role]}
+              </span>
+            </div>
+          </div>
           {navItems.map((item) => {
             const isActive = activeView === item.view
             return (

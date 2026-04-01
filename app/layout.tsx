@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Source_Serif_4 } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/lib/auth-context'
@@ -6,6 +6,11 @@ import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const sourceSerif = Source_Serif_4({ subsets: ['latin'], variable: '--font-source-serif', weight: ['400', '600', '700'] })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
 
 export const metadata: Metadata = {
   title: 'TTI Bursary Management',
