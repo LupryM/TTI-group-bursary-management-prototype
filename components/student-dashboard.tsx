@@ -1,8 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { THANDI_WORKSHOPS, formatZAR } from "@/lib/mock-data"
+
+// Map funder names to logo files
+const SPONSOR_LOGOS: Record<string, string> = {
+  "Shell South Africa": "/Shell-Logo.png",
+  "Anglo American plc": "/Anglo_American_plc-Logo.wine.png",
+  "Sasol Bursaries": "/Sasol-Logo.wine.png",
+  "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
+}
 
 const THANDI_DOCS = [
   { label: "South African ID (certified)", uploaded: true },
@@ -129,6 +138,19 @@ export function StudentDashboard() {
                     </p>
                     {item.isBadge ? (
                       <span className={statusBadge(item.variant ?? item.value)}>{item.value}</span>
+                    ) : item.label === "Funder" ? (
+                      <div className="flex items-center gap-2">
+                        {SPONSOR_LOGOS[item.value] && (
+                          <Image
+                            src={SPONSOR_LOGOS[item.value]}
+                            alt={item.value}
+                            width={32}
+                            height={24}
+                            className="object-contain h-6 w-auto"
+                          />
+                        )}
+                        <p className="text-sm font-medium text-[#1A1A2E] font-sans">{item.value}</p>
+                      </div>
                     ) : (
                       <p className="text-sm font-medium text-[#1A1A2E] font-sans">{item.value}</p>
                     )}
