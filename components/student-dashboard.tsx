@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
-import { THANDI_WORKSHOPS, formatZAR } from "@/lib/mock-data"
+import { formatZAR, Workshop } from "@/lib/mock-data"
 
 // Map funder names to logo files
 const SPONSOR_LOGOS: Record<string, string> = {
@@ -13,14 +13,19 @@ const SPONSOR_LOGOS: Record<string, string> = {
   "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
 }
 
-const THANDI_DOCS = [
+interface Doc {
+  label: string
+  uploaded: boolean
+}
+
+const THANDI_DOCS: Doc[] = [
   { label: "South African ID (certified)", uploaded: true },
   { label: "Proof of Registration / Acceptance Letter", uploaded: true },
   { label: "Full Academic Record", uploaded: true },
   { label: "Head & Shoulders Photograph", uploaded: false },
 ]
 
-const SIPHO_DOCS = [
+const SIPHO_DOCS: Doc[] = [
   { label: "South African ID (certified)", uploaded: true },
   { label: "Proof of Registration / Acceptance Letter", uploaded: false },
   { label: "Full Academic Record", uploaded: false },
@@ -40,16 +45,32 @@ const statusBadge = (variant: string) => {
 
 export function StudentDashboard() {
   const { user } = useAuth()
+  const [workshops, setWorkshops] = useState<Workshop[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    fetch(`/api/workshops?studentId=${user.id}`)
+      .then((r) => r.json())
+      .then((data: Workshop[]) => {
+        if (data.length > 0) {
+          setWorkshops(data)
+        } else {
+          // No workshops for this student yet — show all as Upcoming
+          fetch("/api/workshops?studentId=student-1")
+            .then((r) => r.json())
+            .then((base: Workshop[]) =>
+              setWorkshops(base.map((w) => ({ ...w, status: "Upcoming" as const })))
+            )
+        }
+      })
+  }, [user])
 
   if (!user || user.role !== "student") return null
 
   const isThandi = user.id === "student-1"
   const docs = isThandi ? THANDI_DOCS : SIPHO_DOCS
-  const workshops = isThandi
-    ? THANDI_WORKSHOPS
-    : THANDI_WORKSHOPS.map((w) => ({ ...w, status: "Upcoming" as const }))
 
   const completedDocs = docs.filter((d) => d.uploaded).length
   const totalDocs = docs.length
@@ -175,7 +196,9 @@ export function StudentDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {workshops.map((ws, idx) => (
+                  {workshops.length === 0 ? (
+                    <tr><td colSpan={4} className="py-8 text-center text-sm text-[#9CA3AF]">Loading workshops…</td></tr>
+                  ) : workshops.map((ws, idx) => (
                     <tr key={ws.id} className={`border-b border-[#E5E7EB] last:border-0 ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
                       <td className="px-4 py-3">
                         <p className="font-medium text-[#1A1A2E]">{ws.title}</p>
@@ -207,10 +230,7 @@ export function StudentDashboard() {
                   key={doc.label}
                   className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== docs.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
                 >
-                  <span
-                    className={`flex-shrink-0 w-4 h-4 ${doc.uploaded ? "text-[#F5A623]" : "text-[#D1D5DB]"}`}
-                    aria-hidden="true"
-                  >
+                  <span className={`flex-shrink-0 w-4 h-4 ${doc.uploaded ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
                     {doc.uploaded ? (
                       <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
                         <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
@@ -233,7 +253,6 @@ export function StudentDashboard() {
                 </div>
               ))}
             </div>
-            {/* doc progress */}
             <div className="mt-2 bg-white border border-[#E5E7EB] rounded-sm px-4 py-2 flex items-center justify-between gap-3">
               <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
                 <div
