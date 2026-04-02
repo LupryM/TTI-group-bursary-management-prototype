@@ -20,11 +20,20 @@ const DEFAULT_VIEW: Record<string, AnyView> = {
 }
 
 export default function HomePage() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [activeView, setActiveView] = useState<AnyView>("dashboard")
 
   // Reset view when user changes (login/logout handled by context)
   const handleViewChange = (view: AnyView) => setActiveView(view)
+
+  // Show nothing while restoring session (avoids login screen flash)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F6F8] flex items-center justify-center">
+        <p className="text-sm text-[#9CA3AF] font-sans">Loading…</p>
+      </div>
+    )
+  }
 
   // Not logged in — show login screen
   if (!user) {

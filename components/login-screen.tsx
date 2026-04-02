@@ -145,7 +145,11 @@ export function LoginScreen() {
                   Select account
                 </label>
                 <div className="flex flex-col gap-2">
-                  {usersForRole.map((u) => (
+                  {usersLoading ? (
+                    <div className="py-6 text-center text-xs text-[#9CA3AF] font-sans">Loading accounts…</div>
+                  ) : usersForRole.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-[#9CA3AF] font-sans">No accounts found for this role.</div>
+                  ) : usersForRole.map((u) => (
                     <UserCard
                       key={u.id}
                       user={u}

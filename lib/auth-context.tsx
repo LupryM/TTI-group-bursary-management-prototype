@@ -53,6 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((res) => res.json())
       .then((data: MockUser[]) => {
         setUsers(data)
+        // Restore session from localStorage
+        const savedId = localStorage.getItem("tti_user_id")
+        if (savedId) {
+          const found = data.find((u) => u.id === savedId)
+          if (found) setUser(found)
+        }
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -60,10 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (userId: string) => {
     const found = users.find((u) => u.id === userId)
-    if (found) setUser(found)
+    if (found) {
+      setUser(found)
+      localStorage.setItem("tti_user_id", userId)
+    }
   }
 
-  const logout = () => setUser(null)
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem("tti_user_id")
+  }
 
   return (
     <AuthContext.Provider value={{ user, users, loading, login, logout }}>
