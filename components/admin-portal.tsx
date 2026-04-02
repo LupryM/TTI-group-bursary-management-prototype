@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
-import { ALL_APPLICATIONS, ANGLO_STUDENTS, formatZAR, progressPct, Application } from "@/lib/mock-data"
+import { formatZAR, progressPct, Application, FunderStudent } from "@/lib/mock-data"
 import type { AdminView } from "@/components/nav-bar"
 
 // Map funder names to logo files
@@ -39,12 +39,22 @@ const statusBadge = (s: string) => {
 // ── Applications queue ────────────────────────────────────────────────────────
 
 function AdminApplications() {
-  const [apps, setApps] = useState<Application[]>(ALL_APPLICATIONS)
+  const [apps, setApps] = useState<Application[]>([])
+  const [loadingData, setLoadingData] = useState(true)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<AppStatus | "All">("All")
   const [selected, setSelected] = useState<Application | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null)
+
+  useEffect(() => {
+    fetch("/api/applications")
+      .then((r) => r.json())
+      .then((data: Application[]) => {
+        setApps(data)
+        setLoadingData(false)
+      })
+  }, [])
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type })
@@ -53,12 +63,22 @@ function AdminApplications() {
 
   const updateStatus = (id: string, status: AppStatus) => {
     setActionLoading(true)
-    setTimeout(() => {
-      setApps((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
-      setSelected((prev) => (prev?.id === id ? { ...prev, status } : prev))
-      setActionLoading(false)
-      showToast(`Application ${status.toLowerCase()} successfully.`)
-    }, 800)
+    fetch("/api/applications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    })
+      .then((r) => r.json())
+      .then((updated: Application) => {
+        setApps((prev) => prev.map((a) => (a.id === id ? updated : a)))
+        setSelected((prev) => (prev?.id === id ? updated : prev))
+        setActionLoading(false)
+        showToast(`Application ${status.toLowerCase()} successfully.`)
+      })
+      .catch(() => {
+        setActionLoading(false)
+        showToast("Failed to update status.", "error")
+      })
   }
 
   const filtered = apps.filter((a) => {
@@ -147,6 +167,9 @@ function AdminApplications() {
         />
       </div>
 
+      {loadingData ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">Loading applications…</div>
+      ) : (
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Table */}
         <div className="flex-1 min-w-0 bg-white border border-[#E5E7EB] rounded-sm overflow-x-auto">
@@ -214,7 +237,6 @@ function AdminApplications() {
               </button>
             </div>
             <div className="p-5 flex flex-col gap-4">
-              {/* Student info */}
               <div>
                 <p className="text-base font-semibold text-[#1A1A2E] font-sans">{selected.studentName}</p>
                 <p className="text-xs text-[#9CA3AF] font-mono">{selected.studentNo}</p>
@@ -234,7 +256,6 @@ function AdminApplications() {
                 </div>
               ))}
 
-              {/* Document status */}
               <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm p-3 flex gap-4">
                 <div className="flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${selected.idVerified ? "bg-emerald-400" : "bg-[#D1D5DB]"}`} />
@@ -246,13 +267,11 @@ function AdminApplications() {
                 </div>
               </div>
 
-              {/* Current status */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Status:</span>
                 <span className={statusBadge(selected.status)}>{selected.status}</span>
               </div>
 
-              {/* Action buttons */}
               {selected.status !== "Approved" && selected.status !== "Rejected" && (
                 <div className="flex gap-2">
                   <button
@@ -290,6 +309,7 @@ function AdminApplications() {
           </div>
         )}
       </div>
+      )}
     </main>
   )
 }
@@ -297,11 +317,21 @@ function AdminApplications() {
 // ── Skills tracker ────────────────────────────────────────────────────────────
 
 function AdminSkillsTracker() {
-  const students = ANGLO_STUDENTS
+  const [students, setStudents] = useState<FunderStudent[]>([])
+  const [loadingData, setLoadingData] = useState(true)
   const [search, setSearch] = useState("")
   const [confirmRow, setConfirmRow] = useState<string | null>(null)
   const [completedRows, setCompletedRows] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/students")
+      .then((r) => r.json())
+      .then((data: FunderStudent[]) => {
+        setStudents(data)
+        setLoadingData(false)
+      })
+  }, [])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -314,7 +344,9 @@ function AdminSkillsTracker() {
     showToast(`${name} marked as programme complete.`)
   }
 
-  const avgProgress = Math.round(students.reduce((a, s) => a + progressPct(s.modules), 0) / students.length)
+  const avgProgress = students.length
+    ? Math.round(students.reduce((a, s) => a + progressPct(s.modules), 0) / students.length)
+    : 0
   const totalAmount = students.reduce((a, s) => a + s.amount, 0)
   const totalActive = students.filter((s) => s.status === "Approved").length
 
@@ -371,6 +403,9 @@ function AdminSkillsTracker() {
         />
       </div>
 
+      {loadingData ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">Loading students…</div>
+      ) : (
       <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-x-auto">
         <table className="w-full text-sm font-sans min-w-[900px]" role="table">
           <thead>
@@ -448,6 +483,7 @@ function AdminSkillsTracker() {
           </tbody>
         </table>
       </div>
+      )}
 
       <div className="mt-3 flex items-center justify-between">
         <p className="text-xs text-[#9CA3AF] font-sans">Showing {filtered.length} of {students.length} enrolled students — 2026 cohort</p>
@@ -459,13 +495,29 @@ function AdminSkillsTracker() {
 
 // ── Funders management ────────────────────────────────────────────────────────
 
+interface FunderRow {
+  id: string
+  name: string
+  contact: string
+  email: string
+  budget: number
+  students: number
+  level: number
+  status: string
+}
+
 function AdminFunders() {
-  const funders = [
-    { id: "f1", name: "Shell South Africa", contact: "Michael Chen", email: "michael@shell.com", budget: 4000000, students: 5, level: 1, status: "Active" },
-    { id: "f2", name: "Anglo American plc", contact: "Priya Naidoo", email: "priya@angloamerican.com", budget: 2500000, students: 3, level: 1, status: "Active" },
-    { id: "f3", name: "Sasol Bursaries", contact: "Jacques Rossouw", email: "jacques@sasol.com", budget: 1800000, students: 2, level: 1, status: "Active" },
-    { id: "f4", name: "Nedbank Foundation", contact: "Aisha Patel", email: "aisha@nedbank.co.za", budget: 1200000, students: 0, level: 2, status: "Pending Setup" },
-  ]
+  const [funders, setFunders] = useState<FunderRow[]>([])
+  const [loadingData, setLoadingData] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/funders")
+      .then((r) => r.json())
+      .then((data: FunderRow[]) => {
+        setFunders(data)
+        setLoadingData(false)
+      })
+  }, [])
 
   const statusColor: Record<string, string> = {
     Active: "bg-emerald-100 text-emerald-700",
@@ -503,6 +555,10 @@ function AdminFunders() {
       </div>
 
       <SectionHeader>Registered Funders</SectionHeader>
+
+      {loadingData ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">Loading funders…</div>
+      ) : (
       <div className="flex flex-col gap-4">
         {funders.map((f) => (
           <div key={f.id} className="bg-white border border-[#E5E7EB] rounded-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -518,7 +574,7 @@ function AdminFunders() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-semibold text-[#1A1A2E] font-sans">{f.name}</p>
-                <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-sm font-sans ${statusColor[f.status]}`}>{f.status}</span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-sm font-sans ${statusColor[f.status] ?? "bg-[#F5F6F8] text-[#9CA3AF]"}`}>{f.status}</span>
                 <span className="text-[10px] font-semibold bg-[#F5A623]/15 text-[#A06B00] px-2 py-0.5 rounded-sm font-sans">Level {f.level}</span>
               </div>
               <p className="text-xs text-[#9CA3AF] mt-0.5">{f.contact} &mdash; <a href={`mailto:${f.email}`} className="text-[#F5A623] hover:underline">{f.email}</a></p>
@@ -539,6 +595,7 @@ function AdminFunders() {
           </div>
         ))}
       </div>
+      )}
     </main>
   )
 }

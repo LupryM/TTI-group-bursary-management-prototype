@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
-import { ANGLO_STUDENTS, formatZAR, progressPct, FunderStudent } from "@/lib/mock-data"
+import { formatZAR, progressPct, FunderStudent } from "@/lib/mock-data"
 import type { FunderView } from "@/components/nav-bar"
 
 // Map funder names to logo files
@@ -48,18 +48,27 @@ const statusBadge = (s: string) => {
 
 function FunderOverview() {
   const { user } = useAuth()
+  const [students, setStudents] = useState<FunderStudent[]>([])
+
+  useEffect(() => {
+    if (!user) return
+    fetch(`/api/students?funderId=${user.id}`)
+      .then((r) => r.json())
+      .then(setStudents)
+  }, [user])
+
   if (!user) return null
 
-  const isSasol = user.id === "funder-2"
-  const students = isSasol
-    ? ANGLO_STUDENTS.map((s) => ({ ...s, name: ["Sipho Dlamini", "Nomvula Zulu", "Karabo Sithole"][ANGLO_STUDENTS.indexOf(s) % 3] }))
-    : ANGLO_STUDENTS
   const totalDisbursed = students.reduce((a, s) => a + s.disbursed, 0)
   const totalCommitted = students.reduce((a, s) => a + s.amount, 0)
   const approved = students.filter((s) => s.status === "Approved").length
-  const avgProgress = Math.round(students.reduce((a, s) => a + progressPct(s.modules), 0) / students.length)
+  const avgProgress = students.length
+    ? Math.round(students.reduce((a, s) => a + progressPct(s.modules), 0) / students.length)
+    : 0
 
-  const disbursementPct = Math.round((totalDisbursed / (user.totalBudget ?? 1)) * 100)
+  const disbursementPct = user.totalBudget
+    ? Math.round((totalDisbursed / user.totalBudget) * 100)
+    : 0
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
@@ -143,7 +152,9 @@ function FunderOverview() {
               </tr>
             </thead>
             <tbody>
-              {students.map((s, idx) => {
+              {students.length === 0 ? (
+                <tr><td colSpan={5} className="py-8 text-center text-sm text-[#9CA3AF]">No students found.</td></tr>
+              ) : students.map((s, idx) => {
                 const pct = progressPct(s.modules)
                 return (
                   <tr key={s.id} className={`border-b border-[#E5E7EB] last:border-0 ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
@@ -186,11 +197,19 @@ function FunderOverview() {
 
 function FunderStudents() {
   const { user } = useAuth()
+  const [students, setStudents] = useState<FunderStudent[]>([])
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    fetch(`/api/students?funderId=${user.id}`)
+      .then((r) => r.json())
+      .then(setStudents)
+  }, [user])
+
   if (!user) return null
 
-  const students = ANGLO_STUDENTS
   const filtered = students.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -232,7 +251,6 @@ function FunderStudents() {
                 onClick={() => setExpanded(isOpen ? null : s.id)}
                 aria-expanded={isOpen}
               >
-                {/* Avatar */}
                 <div className="w-10 h-10 rounded-full bg-[#1A2B4A] text-white flex items-center justify-center text-sm font-bold font-sans flex-shrink-0">
                   {s.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                 </div>
@@ -243,7 +261,6 @@ function FunderStudents() {
                   </div>
                   <p className="text-xs text-[#9CA3AF] mt-0.5">{s.institution} — {s.programme}</p>
                 </div>
-                {/* Progress */}
                 <div className="hidden sm:flex items-center gap-3 flex-shrink-0">
                   <div className="w-24 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
                     <div className="h-full bg-[#F5A623] rounded-full" style={{ width: `${pct}%` }} />
@@ -356,7 +373,6 @@ function FunderReports() {
         </div>
       </div>
 
-      {/* Reports list */}
       <SectionHeader>Available Reports</SectionHeader>
       <div className="flex flex-col gap-3">
         {reports.map((r) => (

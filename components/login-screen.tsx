@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { MOCK_USERS, MockUser, useAuth } from "@/lib/auth-context"
+import { MockUser, useAuth } from "@/lib/auth-context"
 
 type RoleTab = "student" | "funder" | "admin"
 
@@ -43,13 +43,13 @@ const roleConfig: Record<RoleTab, { label: string; description: string; icon: Re
 }
 
 export function LoginScreen() {
-  const { login } = useAuth()
+  const { login, users, loading: usersLoading } = useAuth()
   const [activeRole, setActiveRole] = useState<RoleTab>("student")
   const [selectedUserId, setSelectedUserId] = useState<string>("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const usersForRole = MOCK_USERS.filter((u) => u.role === activeRole)
+  const usersForRole = users.filter((u) => u.role === activeRole)
 
   const handleRoleChange = (role: RoleTab) => {
     setActiveRole(role)

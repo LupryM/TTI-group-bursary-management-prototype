@@ -83,13 +83,22 @@ export function ApplicationForm() {
 
   const wordCount = form.needStatement.trim().split(/\s+/).filter(Boolean).length
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.consent || formState === "submitting") return
     setFormState("submitting")
-    const ref = `TTI-2026-${Math.floor(1000 + Math.random() * 9000)}`
-    setRefNumber(ref)
-    setTimeout(() => setFormState("success"), 1400)
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      setRefNumber(data.refNumber)
+      setFormState("success")
+    } catch {
+      setFormState("idle")
+    }
   }
 
   const resetForm = () => {

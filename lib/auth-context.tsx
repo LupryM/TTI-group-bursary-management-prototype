@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 
 export type Role = "student" | "funder" | "admin"
 
@@ -27,104 +27,46 @@ export interface MockUser {
   department?: string
 }
 
-export const MOCK_USERS: MockUser[] = [
-  {
-    id: "student-1",
-    name: "Thandi Mokoena",
-    email: "thandi@student.up.ac.za",
-    role: "student",
-    studentNo: "UP22/0045812",
-    refNo: "TTI-2026-8472",
-    institution: "University of Pretoria",
-    programme: "BSc Computer Science",
-    year: "3rd Year",
-    funderName: "Anglo American plc",
-    bursaryAmount: 48500,
-    status: "Approved",
-  },
-  {
-    id: "student-2",
-    name: "Sipho Dlamini",
-    email: "sipho@student.wits.ac.za",
-    role: "student",
-    studentNo: "WITS21/0033124",
-    refNo: "TTI-2026-3301",
-    institution: "University of the Witwatersrand",
-    programme: "BCom Accounting",
-    year: "2nd Year",
-    funderName: "Sasol Bursaries",
-    bursaryAmount: 42000,
-    status: "Under Review",
-  },
-  {
-    id: "funder-0",
-    name: "Michael Chen",
-    email: "michael@shell.com",
-    role: "funder",
-    company: "Shell South Africa",
-    bbbeeLevel: 1,
-    totalBudget: 4000000,
-  },
-  {
-    id: "funder-1",
-    name: "Priya Naidoo",
-    email: "priya@angloamerican.com",
-    role: "funder",
-    company: "Anglo American plc",
-    bbbeeLevel: 1,
-    totalBudget: 2500000,
-  },
-  {
-    id: "funder-2",
-    name: "Jacques Rossouw",
-    email: "jacques@sasol.com",
-    role: "funder",
-    company: "Sasol Bursaries",
-    bbbeeLevel: 1,
-    totalBudget: 1800000,
-  },
-  {
-    id: "funder-3",
-    name: "Aisha Patel",
-    email: "aisha@nedbank.co.za",
-    role: "funder",
-    company: "Nedbank Foundation",
-    bbbeeLevel: 2,
-    totalBudget: 1200000,
-  },
-  {
-    id: "admin-1",
-    name: "Lerato Sithole",
-    email: "lerato@ttibursaries.co.za",
-    role: "admin",
-    department: "Bursary Operations",
-  },
-]
-
 interface AuthContextValue {
   user: MockUser | null
+  users: MockUser[]
+  loading: boolean
   login: (userId: string) => void
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
+  users: [],
+  loading: true,
   login: () => {},
   logout: () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MockUser | null>(null)
+  const [users, setUsers] = useState<MockUser[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/users")
+      .then((res) => res.json())
+      .then((data: MockUser[]) => {
+        setUsers(data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
   const login = (userId: string) => {
-    const found = MOCK_USERS.find((u) => u.id === userId)
+    const found = users.find((u) => u.id === userId)
     if (found) setUser(found)
   }
 
   const logout = () => setUser(null)
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, users, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
