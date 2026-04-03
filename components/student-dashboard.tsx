@@ -53,18 +53,7 @@ export function StudentDashboard() {
     if (!user) return
     fetch(`/api/workshops?studentId=${user.id}`)
       .then((r) => r.json())
-      .then((data: Workshop[]) => {
-        if (data.length > 0) {
-          setWorkshops(data)
-        } else {
-          // No workshops for this student yet — show all as Upcoming
-          fetch("/api/workshops?studentId=student-1")
-            .then((r) => r.json())
-            .then((base: Workshop[]) =>
-              setWorkshops(base.map((w) => ({ ...w, status: "Upcoming" as const })))
-            )
-        }
-      })
+      .then((data: Workshop[]) => setWorkshops(data))
   }, [user])
 
   if (!user || user.role !== "student") return null
