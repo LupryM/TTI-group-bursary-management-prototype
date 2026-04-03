@@ -13,8 +13,18 @@ export async function POST(request: Request) {
   const db = getDb()
   const body = await request.json()
 
-  const appId = `app-${String((db.prepare("SELECT COUNT(*) as c FROM applications").get() as { c: number }).c + 1).padStart(3, "0")}`
-  const refNumber = `TTI-2026-${Math.floor(1000 + Math.random() * 9000)}`
+  // Use max rowid so deletions don't cause ID reuse
+  const maxRow = db.prepare("SELECT COALESCE(MAX(rowid), 0) as m FROM applications").get() as { m: number }
+  const appId = `app-${String(maxRow.m + 1).padStart(4, "0")}`
+
+  // Generate a unique 6-digit ref number, retry until no collision
+  let refNumber = ""
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate = `TTI-${new Date().getFullYear()}-${String(Math.floor(100000 + Math.random() * 900000))}`
+    const exists = db.prepare("SELECT id FROM applications WHERE ref_number = ?").get(candidate)
+    if (!exists) { refNumber = candidate; break }
+  }
+  if (!refNumber) refNumber = `TTI-${new Date().getFullYear()}-${Date.now()}`
   const submittedDate = new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
 
   const stmt = db.prepare(`
@@ -56,11 +66,37 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "id and status are required" }, { status: 400 })
   }
 
+  const changedAt = new Date().toISOString()
+  const changedBy = body.changedBy || "admin"
+  const auditLog = db.prepare(
+    "INSERT INTO application_audit (application_id, changed_at, changed_by, field, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)"
+  )
+
+  const current = db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as Record<string, unknown>
+  if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  // Handle funder/amount assignment separately
+  if (body.funder !== undefined || body.amount !== undefined) {
+    if (body.funder !== undefined) {
+      auditLog.run(id, changedAt, changedBy, "funder", String(current.funder ?? ""), String(body.funder))
+      db.prepare("UPDATE applications SET funder = ? WHERE id = ?").run(String(body.funder), id)
+    }
+    if (body.amount !== undefined) {
+      const amt = parseFloat(String(body.amount))
+      if (isNaN(amt) || amt < 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 })
+      auditLog.run(id, changedAt, changedBy, "amount", String(current.amount ?? 0), String(amt))
+      db.prepare("UPDATE applications SET amount = ? WHERE id = ?").run(amt, id)
+    }
+    const updated = db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as Record<string, unknown>
+    return NextResponse.json(toAppJson(updated))
+  }
+
   const valid = ["Approved", "Pending", "Under Review", "Rejected"]
   if (!valid.includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 })
   }
 
+  auditLog.run(id, changedAt, changedBy, "status", String(current.status ?? ""), status)
   db.prepare("UPDATE applications SET status = ? WHERE id = ?").run(status, id)
   const updated = db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as Record<string, unknown>
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 })

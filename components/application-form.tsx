@@ -5,7 +5,14 @@ import { useAuth } from "@/lib/auth-context"
 
 const inputCls =
   "w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors placeholder:text-[#9CA3AF] rounded-sm disabled:bg-[#F5F6F8] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
+const inputErrCls =
+  "w-full border border-red-400 bg-red-50/30 px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-red-500 transition-colors placeholder:text-[#9CA3AF] rounded-sm disabled:bg-[#F5F6F8] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
 const labelCls = "block text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5"
+
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null
+  return <p className="text-[10px] text-red-500 font-sans mt-1">{msg}</p>
+}
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -19,7 +26,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
-type FormState = "idle" | "submitting" | "success"
+type FormState = "idle" | "submitting" | "success" | "error"
 
 interface FormData {
   firstName: string
@@ -81,23 +88,49 @@ export function ApplicationForm() {
   const setCheck = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, consent: e.target.checked }))
 
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData | "_form", string>>>({})
+
   const wordCount = form.needStatement.trim().split(/\s+/).filter(Boolean).length
+
+  const validateForm = (): boolean => {
+    const errs: Partial<Record<keyof FormData | "_form", string>> = {}
+    if (!form.firstName.trim()) errs.firstName = "First name is required."
+    if (!form.lastName.trim()) errs.lastName = "Last name is required."
+    if (!form.idNumber.trim()) errs.idNumber = "SA ID number is required."
+    else if (!/^\d{13}$/.test(form.idNumber.trim())) errs.idNumber = "SA ID must be exactly 13 digits."
+    if (!form.email.trim()) errs.email = "Email address is required."
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = "Enter a valid email address."
+    if (!form.phone.trim()) errs.phone = "Mobile number is required."
+    if (!form.university) errs.university = "Please select an institution."
+    if (!form.programme.trim()) errs.programme = "Programme is required."
+    if (!form.year) errs.year = "Please select year of study."
+    if (!form.annualIncome.trim()) errs.annualIncome = "Household income is required."
+    else if (!/^\d[\d\s.,]*$/.test(form.annualIncome.trim().replace(/^R\s?/, "")))
+      errs.annualIncome = "Enter a numeric value (e.g. 120000 or R 120,000)."
+    if (wordCount < 100) errs.needStatement = `Minimum 100 words required (currently ${wordCount}).`
+    if (!form.consent) errs._form = "You must accept the consent declaration."
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.consent || formState === "submitting") return
+    if (formState === "submitting") return
+    if (!validateForm()) return
     setFormState("submitting")
+    setErrors({})
     try {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
+      if (!res.ok) throw new Error("Submission failed")
       const data = await res.json()
       setRefNumber(data.refNumber)
       setFormState("success")
     } catch {
-      setFormState("idle")
+      setFormState("error")
     }
   }
 
@@ -194,15 +227,18 @@ export function ApplicationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label htmlFor="app-firstName" className={labelCls}>First Name</label>
-                <input id="app-firstName" className={inputCls} value={form.firstName} onChange={set("firstName")} placeholder="Given name" required disabled={isStudent && !!form.firstName} />
+                <input id="app-firstName" className={errors.firstName ? inputErrCls : inputCls} value={form.firstName} onChange={set("firstName")} placeholder="Given name" disabled={isStudent && !!form.firstName} />
+                <FieldError msg={errors.firstName} />
               </div>
               <div>
                 <label htmlFor="app-lastName" className={labelCls}>Last Name</label>
-                <input id="app-lastName" className={inputCls} value={form.lastName} onChange={set("lastName")} placeholder="Surname" required disabled={isStudent && !!form.lastName} />
+                <input id="app-lastName" className={errors.lastName ? inputErrCls : inputCls} value={form.lastName} onChange={set("lastName")} placeholder="Surname" disabled={isStudent && !!form.lastName} />
+                <FieldError msg={errors.lastName} />
               </div>
               <div>
                 <label htmlFor="app-id" className={labelCls}>SA ID Number</label>
-                <input id="app-id" className={inputCls} value={form.idNumber} onChange={set("idNumber")} placeholder="13-digit ID number" maxLength={13} required />
+                <input id="app-id" className={errors.idNumber ? inputErrCls : inputCls} value={form.idNumber} onChange={set("idNumber")} placeholder="13-digit ID number" maxLength={13} />
+                <FieldError msg={errors.idNumber} />
               </div>
               <div>
                 <label htmlFor="app-sno" className={labelCls}>Student Number</label>
@@ -210,11 +246,13 @@ export function ApplicationForm() {
               </div>
               <div>
                 <label htmlFor="app-email" className={labelCls}>Email Address</label>
-                <input id="app-email" type="email" className={inputCls} value={form.email} onChange={set("email")} placeholder="you@institution.ac.za" required disabled={isStudent && !!form.email} />
+                <input id="app-email" type="email" className={errors.email ? inputErrCls : inputCls} value={form.email} onChange={set("email")} placeholder="you@institution.ac.za" disabled={isStudent && !!form.email} />
+                <FieldError msg={errors.email} />
               </div>
               <div>
                 <label htmlFor="app-phone" className={labelCls}>Mobile Number</label>
-                <input id="app-phone" type="tel" className={inputCls} value={form.phone} onChange={set("phone")} placeholder="+27 8X XXX XXXX" required />
+                <input id="app-phone" type="tel" className={errors.phone ? inputErrCls : inputCls} value={form.phone} onChange={set("phone")} placeholder="+27 8X XXX XXXX" />
+                <FieldError msg={errors.phone} />
               </div>
             </div>
           </SectionCard>
@@ -223,23 +261,26 @@ export function ApplicationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="sm:col-span-2">
                 <label htmlFor="app-uni" className={labelCls}>Institution</label>
-                <select id="app-uni" className={`${inputCls} appearance-none`} value={form.university} onChange={set("university")} required disabled={isStudent && !!form.university}>
+                <select id="app-uni" className={`${errors.university ? inputErrCls : inputCls} appearance-none`} value={form.university} onChange={set("university")} disabled={isStudent && !!form.university}>
                   <option value="">Select institution…</option>
                   {UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
+                <FieldError msg={errors.university} />
               </div>
               <div>
                 <label htmlFor="app-prog" className={labelCls}>Programme / Qualification</label>
-                <input id="app-prog" className={inputCls} value={form.programme} onChange={set("programme")} placeholder="e.g. BSc Computer Science" required disabled={isStudent && !!form.programme} />
+                <input id="app-prog" className={errors.programme ? inputErrCls : inputCls} value={form.programme} onChange={set("programme")} placeholder="e.g. BSc Computer Science" disabled={isStudent && !!form.programme} />
+                <FieldError msg={errors.programme} />
               </div>
               <div>
                 <label htmlFor="app-year" className={labelCls}>Year of Study</label>
-                <select id="app-year" className={`${inputCls} appearance-none`} value={form.year} onChange={set("year")} required>
+                <select id="app-year" className={`${errors.year ? inputErrCls : inputCls} appearance-none`} value={form.year} onChange={set("year")}>
                   <option value="">Select year…</option>
                   {["1st Year", "2nd Year", "3rd Year", "4th Year", "Honours", "Masters"].map((y) => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
+                <FieldError msg={errors.year} />
               </div>
             </div>
           </SectionCard>
@@ -248,7 +289,8 @@ export function ApplicationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label htmlFor="app-income" className={labelCls}>Combined Household Income (p.a.)</label>
-                <input id="app-income" className={inputCls} value={form.annualIncome} onChange={set("annualIncome")} placeholder="R 0.00" required />
+                <input id="app-income" className={errors.annualIncome ? inputErrCls : inputCls} value={form.annualIncome} onChange={set("annualIncome")} placeholder="e.g. R 120 000" />
+                <FieldError msg={errors.annualIncome} />
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="app-need" className={labelCls}>
@@ -257,22 +299,22 @@ export function ApplicationForm() {
                 </label>
                 <textarea
                   id="app-need"
-                  className={`${inputCls} resize-none`}
+                  className={`${errors.needStatement ? inputErrCls : inputCls} resize-none`}
                   rows={5}
                   value={form.needStatement}
                   onChange={set("needStatement")}
                   placeholder="Explain your financial circumstances and how a bursary would assist you…"
-                  required
                 />
-                <p className={`text-[10px] mt-1 font-sans ${wordCount >= 100 ? "text-emerald-600" : "text-[#9CA3AF]"}`}>
+                <p className={`text-[10px] mt-1 font-sans ${wordCount >= 100 ? "text-emerald-600" : errors.needStatement ? "text-red-500" : "text-[#9CA3AF]"}`}>
                   {wordCount} / 100 words minimum
                 </p>
+                <FieldError msg={errors.needStatement} />
               </div>
             </div>
           </SectionCard>
 
           {/* Consent */}
-          <div className="bg-white border border-[#E5E7EB] rounded-sm p-5 mb-6">
+          <div className={`bg-white border rounded-sm p-5 mb-6 ${errors._form ? "border-red-300 bg-red-50/20" : "border-[#E5E7EB]"}`}>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -285,16 +327,28 @@ export function ApplicationForm() {
                 I confirm that the information provided is accurate and complete. I consent to TTI processing my personal information in accordance with POPIA for the purposes of bursary management. I understand that incomplete or inaccurate applications will be disqualified.
               </span>
             </label>
+            <FieldError msg={errors._form} />
           </div>
+
+          {/* Submission error banner */}
+          {formState === "error" && (
+            <div className="mb-5 flex items-start gap-3 bg-red-50 border border-red-300 text-red-700 text-sm font-sans px-4 py-3 rounded-sm">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 mt-0.5" aria-hidden="true">
+                <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 4.5v4M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span>Submission failed. Please check your connection and try again. If the problem persists, contact <strong>students@ttibursaries.co.za</strong>.</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <p className="text-xs text-[#9CA3AF] font-sans">All fields are required unless marked optional.</p>
             <button
               type="submit"
-              disabled={!form.consent || formState === "submitting"}
+              disabled={formState === "submitting"}
               className={[
                 "flex items-center gap-2 px-8 py-3 text-sm font-semibold font-sans tracking-wide rounded-sm transition-colors",
-                !form.consent || formState === "submitting"
+                formState === "submitting"
                   ? "bg-[#F5A623]/40 text-[#1A2B4A]/50 cursor-not-allowed"
                   : "bg-[#F5A623] text-[#1A2B4A] hover:bg-[#D4891A] hover:text-white cursor-pointer",
               ].join(" ")}

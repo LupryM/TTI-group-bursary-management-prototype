@@ -46,6 +46,10 @@ function AdminApplications() {
   const [selected, setSelected] = useState<Application | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null)
+  const [assignFunder, setAssignFunder] = useState("")
+  const [assignAmount, setAssignAmount] = useState("")
+
+  const FUNDERS = ["Anglo American plc", "Sasol Bursaries", "Shell South Africa", "Nedbank Foundation"]
 
   useEffect(() => {
     fetch("/api/applications")
@@ -78,6 +82,33 @@ function AdminApplications() {
       .catch(() => {
         setActionLoading(false)
         showToast("Failed to update status.", "error")
+      })
+  }
+
+  const saveAssignment = () => {
+    if (!selected) return
+    if (!assignFunder && !assignAmount) return
+    setActionLoading(true)
+    const body: Record<string, unknown> = { id: selected.id }
+    if (assignFunder) body.funder = assignFunder
+    if (assignAmount) body.amount = parseFloat(assignAmount.replace(/[^0-9.]/g, ""))
+    fetch("/api/applications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json())
+      .then((updated: Application) => {
+        setApps((prev) => prev.map((a) => (a.id === selected.id ? updated : a)))
+        setSelected(updated)
+        setAssignFunder("")
+        setAssignAmount("")
+        setActionLoading(false)
+        showToast("Assignment saved.")
+      })
+      .catch(() => {
+        setActionLoading(false)
+        showToast("Failed to save assignment.", "error")
       })
   }
 
@@ -267,6 +298,41 @@ function AdminApplications() {
                 </div>
               </div>
 
+              {/* Funder / amount assignment for unassigned applications */}
+              {(selected.funder === "Unassigned" || selected.amount === 0) && (
+                <div className="border border-amber-200 bg-amber-50 rounded-sm p-3 flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-700">Assign Funder &amp; Amount</p>
+                  <div>
+                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Funder</label>
+                    <select
+                      value={assignFunder}
+                      onChange={(e) => setAssignFunder(e.target.value)}
+                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
+                    >
+                      <option value="">Select funder…</option>
+                      {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Bursary Amount (ZAR)</label>
+                    <input
+                      type="text"
+                      value={assignAmount}
+                      onChange={(e) => setAssignAmount(e.target.value)}
+                      placeholder="e.g. 45000"
+                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans font-mono outline-none focus:border-[#F5A623] rounded-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={saveAssignment}
+                    disabled={actionLoading || (!assignFunder && !assignAmount)}
+                    className="w-full py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    Save Assignment
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Status:</span>
                 <span className={statusBadge(selected.status)}>{selected.status}</span>
@@ -320,9 +386,8 @@ function AdminSkillsTracker() {
   const [students, setStudents] = useState<FunderStudent[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [search, setSearch] = useState("")
-  const [confirmRow, setConfirmRow] = useState<string | null>(null)
-  const [completedRows, setCompletedRows] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
+  const [togglingKey, setTogglingKey] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/students")
@@ -338,10 +403,29 @@ function AdminSkillsTracker() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const markComplete = (id: string, name: string) => {
-    setCompletedRows((prev) => new Set([...prev, id]))
-    setConfirmRow(null)
-    showToast(`${name} marked as programme complete.`)
+  const toggleModule = async (studentId: string, moduleName: string, currentComplete: boolean) => {
+    const key = `${studentId}:${moduleName}`
+    setTogglingKey(key)
+    try {
+      const res = await fetch("/api/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, moduleName, complete: !currentComplete }),
+      })
+      if (!res.ok) throw new Error()
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? { ...s, modules: s.modules.map((m) => m.name === moduleName ? { ...m, complete: !currentComplete } : m) }
+            : s
+        )
+      )
+      showToast(`${moduleName} marked as ${!currentComplete ? "complete" : "incomplete"}.`)
+    } catch {
+      showToast("Failed to update module. Please try again.")
+    } finally {
+      setTogglingKey(null)
+    }
   }
 
   const avgProgress = students.length
@@ -418,7 +502,6 @@ function AdminSkillsTracker() {
           <tbody>
             {filtered.map((s, idx) => {
               const pct = progressPct(s.modules)
-              const done = completedRows.has(s.id)
               return (
                 <tr key={s.id} className={`border-b border-[#E5E7EB] last:border-0 align-top ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
                   <td className="px-4 py-3">
@@ -435,15 +518,29 @@ function AdminSkillsTracker() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
-                      {s.modules.map((m) => (
-                        <span
-                          key={m.name}
-                          className={`text-[10px] px-2 py-0.5 rounded-sm font-sans ${m.complete ? "bg-[#F5A623]/15 text-[#A06B00]" : "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB]"}`}
-                        >
-                          {m.name}
-                        </span>
-                      ))}
+                      {s.modules.map((m) => {
+                        const key = `${s.id}:${m.name}`
+                        const loading = togglingKey === key
+                        return (
+                          <button
+                            key={m.name}
+                            onClick={() => toggleModule(s.id, m.name, m.complete)}
+                            disabled={loading}
+                            title={m.complete ? "Click to mark incomplete" : "Click to mark complete"}
+                            className={[
+                              "text-[10px] px-2 py-0.5 rounded-sm font-sans transition-colors cursor-pointer",
+                              loading ? "opacity-50 cursor-wait" : "",
+                              m.complete
+                                ? "bg-[#F5A623]/15 text-[#A06B00] hover:bg-red-100 hover:text-red-600"
+                                : "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB] hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200",
+                            ].join(" ")}
+                          >
+                            {m.name}
+                          </button>
+                        )
+                      })}
                     </div>
+                    <p className="text-[10px] text-[#9CA3AF] mt-1.5">Click module to toggle</p>
                   </td>
                   <td className="px-4 py-3 w-40">
                     <div className="flex items-center gap-2 mb-1">
@@ -457,24 +554,10 @@ function AdminSkillsTracker() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {done ? (
-                      <span className="text-xs font-semibold text-emerald-600 font-sans">Complete</span>
-                    ) : confirmRow === s.id ? (
-                      <div className="flex gap-2">
-                        <button onClick={() => markComplete(s.id, s.name)} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer">
-                          Confirm
-                        </button>
-                        <button onClick={() => setConfirmRow(null)} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F5F6F8] rounded-sm transition-colors cursor-pointer">
-                          Cancel
-                        </button>
-                      </div>
+                    {pct === 100 ? (
+                      <span className="text-xs font-semibold text-emerald-600 font-sans">All Complete</span>
                     ) : (
-                      <button
-                        onClick={() => setConfirmRow(s.id)}
-                        className="text-xs font-semibold text-[#F5A623] hover:text-[#D4891A] underline underline-offset-2 transition-colors font-sans"
-                      >
-                        Mark Complete
-                      </button>
+                      <span className="text-xs text-[#9CA3AF] font-sans">{s.modules.length - s.modules.filter(m => m.complete).length} remaining</span>
                     )}
                   </td>
                 </tr>

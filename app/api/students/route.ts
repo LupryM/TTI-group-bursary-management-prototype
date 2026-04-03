@@ -37,3 +37,23 @@ export function GET(request: Request) {
 
   return NextResponse.json(result)
 }
+
+export async function PATCH(request: Request) {
+  const db = getDb()
+  const body = await request.json()
+  const { studentId, moduleName, complete } = body
+
+  if (!studentId || !moduleName || typeof complete !== "boolean") {
+    return NextResponse.json({ error: "studentId, moduleName, and complete (boolean) are required" }, { status: 400 })
+  }
+
+  const info = db
+    .prepare("UPDATE student_modules SET complete = ? WHERE funder_student_id = ? AND name = ?")
+    .run(complete ? 1 : 0, studentId, moduleName)
+
+  if (info.changes === 0) {
+    return NextResponse.json({ error: "Module not found" }, { status: 404 })
+  }
+
+  return NextResponse.json({ ok: true })
+}
