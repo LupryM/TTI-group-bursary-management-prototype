@@ -110,6 +110,16 @@ function initSchema(db: Database.Database) {
       level INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'Active'
     );
+
+    CREATE TABLE IF NOT EXISTS application_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      application_id TEXT NOT NULL,
+      changed_at TEXT NOT NULL,
+      changed_by TEXT NOT NULL,
+      field TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT
+    );
   `)
 }
 
@@ -194,10 +204,16 @@ function seedIfEmpty(db: Database.Database) {
   `)
 
   const workshops = [
+    // Thandi (student-1)
     { title: "Financial Literacy & Budgeting", date: "14 Mar 2026", status: "Attended", facilitator: "T. Nkosi", duration: "3 hrs", student_id: "student-1" },
     { title: "CV Writing & Professional Branding", date: "28 Mar 2026", status: "Attended", facilitator: "M. van Wyk", duration: "2 hrs", student_id: "student-1" },
     { title: "Workplace Readiness & Ethics", date: "11 Apr 2026", status: "Upcoming", facilitator: "S. Dlamini", duration: "4 hrs", student_id: "student-1" },
     { title: "Entrepreneurship & Business Planning", date: "25 Apr 2026", status: "Upcoming", facilitator: "R. Pillay", duration: "3 hrs", student_id: "student-1" },
+    // Sipho (student-2)
+    { title: "Orientation & Programme Overview", date: "7 Mar 2026", status: "Attended", facilitator: "T. Nkosi", duration: "2 hrs", student_id: "student-2" },
+    { title: "Financial Literacy & Budgeting", date: "21 Mar 2026", status: "Missed", facilitator: "T. Nkosi", duration: "3 hrs", student_id: "student-2" },
+    { title: "CV Writing & Professional Branding", date: "4 Apr 2026", status: "Upcoming", facilitator: "M. van Wyk", duration: "2 hrs", student_id: "student-2" },
+    { title: "Workplace Readiness & Ethics", date: "18 Apr 2026", status: "Upcoming", facilitator: "S. Dlamini", duration: "4 hrs", student_id: "student-2" },
   ]
 
   const seedWS = db.transaction(() => {

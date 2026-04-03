@@ -13,24 +13,28 @@ const SPONSOR_LOGOS: Record<string, string> = {
   "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
 }
 
-interface Doc {
-  label: string
-  uploaded: boolean
+const REQUIRED_DOCS = [
+  "South African ID (certified)",
+  "Proof of Registration / Acceptance Letter",
+  "Full Academic Record",
+  "Head & Shoulders Photograph",
+]
+
+// Initial upload state seeded per known student — in production this comes from the DB
+const INITIAL_UPLOADS: Record<string, Record<string, string | null>> = {
+  "student-1": {
+    "South African ID (certified)": "ID_Thandi_Mokoena.pdf",
+    "Proof of Registration / Acceptance Letter": "UP_Registration_2026.pdf",
+    "Full Academic Record": "Transcript_UP22.pdf",
+    "Head & Shoulders Photograph": null,
+  },
+  "student-2": {
+    "South African ID (certified)": "ID_Sipho_Dlamini.pdf",
+    "Proof of Registration / Acceptance Letter": null,
+    "Full Academic Record": null,
+    "Head & Shoulders Photograph": null,
+  },
 }
-
-const THANDI_DOCS: Doc[] = [
-  { label: "South African ID (certified)", uploaded: true },
-  { label: "Proof of Registration / Acceptance Letter", uploaded: true },
-  { label: "Full Academic Record", uploaded: true },
-  { label: "Head & Shoulders Photograph", uploaded: false },
-]
-
-const SIPHO_DOCS: Doc[] = [
-  { label: "South African ID (certified)", uploaded: true },
-  { label: "Proof of Registration / Acceptance Letter", uploaded: false },
-  { label: "Full Academic Record", uploaded: false },
-  { label: "Head & Shoulders Photograph", uploaded: false },
-]
 
 const statusBadge = (variant: string) => {
   const base = "inline-flex items-center px-2.5 py-0.5 text-xs font-semibold tracking-wide font-sans rounded-sm"
@@ -46,23 +50,47 @@ const statusBadge = (variant: string) => {
 export function StudentDashboard() {
   const { user } = useAuth()
   const [workshops, setWorkshops] = useState<Workshop[]>([])
+  const [workshopsLoading, setWorkshopsLoading] = useState(true)
   const [dragOver, setDragOver] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null)
+  const [selectedDocType, setSelectedDocType] = useState("")
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploads, setUploads] = useState<Record<string, string | null>>({})
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
+    setUploads(INITIAL_UPLOADS[user.id] ?? Object.fromEntries(REQUIRED_DOCS.map((d) => [d, null])))
     fetch(`/api/workshops?studentId=${user.id}`)
       .then((r) => r.json())
-      .then((data: Workshop[]) => setWorkshops(data))
+      .then((data: Workshop[]) => { setWorkshops(data); setWorkshopsLoading(false) })
+      .catch(() => setWorkshopsLoading(false))
   }, [user])
 
   if (!user || user.role !== "student") return null
 
-  const isThandi = user.id === "student-1"
-  const docs = isThandi ? THANDI_DOCS : SIPHO_DOCS
+  const completedDocs = Object.values(uploads).filter(Boolean).length
+  const totalDocs = REQUIRED_DOCS.length
 
-  const completedDocs = docs.filter((d) => d.uploaded).length
-  const totalDocs = docs.length
+  const handleFileUpload = (file: File) => {
+    setUploadError(null)
+    if (!selectedDocType) {
+      setUploadError("Please select which document you are uploading before choosing a file.")
+      return
+    }
+    const allowed = ["application/pdf", "image/jpeg", "image/png"]
+    if (!allowed.includes(file.type)) {
+      setUploadError("Only PDF, JPG, and PNG files are accepted.")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File size must be 10 MB or less.")
+      return
+    }
+    setUploads((prev) => ({ ...prev, [selectedDocType]: file.name }))
+    setUploadSuccess(`"${selectedDocType}" uploaded successfully.`)
+    setSelectedDocType("")
+    setTimeout(() => setUploadSuccess(null), 3000)
+  }
 
   const bursaryDetails = [
     { label: "Application Status", value: user.status ?? "Pending", isBadge: true },
@@ -77,12 +105,13 @@ export function StudentDashboard() {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files[0]
-    if (file) setUploadedFile(file.name)
+    if (file) handleFileUpload(file)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) setUploadedFile(file.name)
+    if (file) handleFileUpload(file)
+    e.target.value = ""
   }
 
   return (
@@ -185,8 +214,10 @@ export function StudentDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {workshops.length === 0 ? (
+                  {workshopsLoading ? (
                     <tr><td colSpan={4} className="py-8 text-center text-sm text-[#9CA3AF]">Loading workshops…</td></tr>
+                  ) : workshops.length === 0 ? (
+                    <tr><td colSpan={4} className="py-8 text-center text-sm text-[#9CA3AF]">No workshops scheduled yet.</td></tr>
                   ) : workshops.map((ws, idx) => (
                     <tr key={ws.id} className={`border-b border-[#E5E7EB] last:border-0 ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
                       <td className="px-4 py-3">
@@ -214,33 +245,39 @@ export function StudentDashboard() {
           <section>
             <SectionHeader>Document Checklist</SectionHeader>
             <div className="bg-white border border-[#E5E7EB] rounded-sm">
-              {docs.map((doc, idx) => (
-                <div
-                  key={doc.label}
-                  className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== docs.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
-                >
-                  <span className={`flex-shrink-0 w-4 h-4 ${doc.uploaded ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
-                    {doc.uploaded ? (
-                      <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
-                        <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
-                        <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
-                        <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className={doc.uploaded ? "text-[#1A1A2E] text-sm" : "text-[#9CA3AF] text-sm"}>
-                    {doc.label}
-                  </span>
-                  {!doc.uploaded && (
-                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#F5A623] bg-[#F5A623]/10 px-1.5 py-0.5 rounded-sm whitespace-nowrap">
-                      Pending
+              {REQUIRED_DOCS.map((label, idx) => {
+                const fileName = uploads[label]
+                return (
+                  <div
+                    key={label}
+                    className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== REQUIRED_DOCS.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
+                  >
+                    <span className={`flex-shrink-0 w-4 h-4 ${fileName ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
+                      {fileName ? (
+                        <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                          <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      )}
                     </span>
-                  )}
-                </div>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <span className={fileName ? "text-[#1A1A2E] text-sm" : "text-[#9CA3AF] text-sm"}>{label}</span>
+                      {fileName && (
+                        <p className="text-[10px] text-[#9CA3AF] font-mono truncate mt-0.5">{fileName}</p>
+                      )}
+                    </div>
+                    {!fileName && (
+                      <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-[#F5A623] bg-[#F5A623]/10 px-1.5 py-0.5 rounded-sm whitespace-nowrap">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
             <div className="mt-2 bg-white border border-[#E5E7EB] rounded-sm px-4 py-2 flex items-center justify-between gap-3">
               <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
@@ -258,47 +295,71 @@ export function StudentDashboard() {
           {/* Upload Zone */}
           <section>
             <SectionHeader>Upload Document</SectionHeader>
-            <label
-              htmlFor="doc-upload"
-              className={[
-                "block bg-white border cursor-pointer transition-colors rounded-sm",
-                dragOver
-                  ? "border-[#F5A623] bg-[#F5A623]/5"
-                  : "border-dashed border-[#D1D5DB] hover:border-[#F5A623]/60",
-              ].join(" ")}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <div className="flex flex-col items-center justify-center py-7 px-4 text-center">
-                <svg width="30" height="30" viewBox="0 0 32 32" fill="none" className="text-[#F5A623]/60 mb-3" aria-hidden="true">
-                  <path d="M10.667 21.333C7.721 21.333 5.333 18.946 5.333 16c0-2.588 1.806-4.754 4.22-5.24A6.667 6.667 0 0 1 22.667 12h.666a5.334 5.334 0 0 1 0 10.667H22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M16 20v-8m0 0-3 3m3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {uploadedFile ? (
-                  <>
-                    <p className="text-sm font-medium text-emerald-700 font-sans">{uploadedFile}</p>
-                    <p className="text-xs text-[#9CA3AF] mt-1">File ready for submission</p>
-                  </>
-                ) : (
-                  <>
+
+            {/* Step 1: select document type */}
+            <div className="mb-3">
+              <label htmlFor="doc-type-select" className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5">
+                1. Select document type
+              </label>
+              <select
+                id="doc-type-select"
+                value={selectedDocType}
+                onChange={(e) => { setSelectedDocType(e.target.value); setUploadError(null) }}
+                className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+              >
+                <option value="">Choose document…</option>
+                {REQUIRED_DOCS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}{uploads[d] ? " ✓ (replace)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Step 2: drop zone */}
+            <div className="mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5">2. Upload file</p>
+              <label
+                htmlFor="doc-upload"
+                className={[
+                  "block bg-white border cursor-pointer transition-colors rounded-sm",
+                  !selectedDocType ? "opacity-50 cursor-not-allowed" : "",
+                  dragOver ? "border-[#F5A623] bg-[#F5A623]/5" : "border-dashed border-[#D1D5DB] hover:border-[#F5A623]/60",
+                ].join(" ")}
+                onDragOver={(e) => { if (!selectedDocType) return; e.preventDefault(); setDragOver(true) }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+              >
+                <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+                  <svg width="28" height="28" viewBox="0 0 32 32" fill="none" className="text-[#F5A623]/60 mb-2" aria-hidden="true">
+                    <path d="M10.667 21.333C7.721 21.333 5.333 18.946 5.333 16c0-2.588 1.806-4.754 4.22-5.24A6.667 6.667 0 0 1 22.667 12h.666a5.334 5.334 0 0 1 0 10.667H22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M16 20v-8m0 0-3 3m3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {selectedDocType ? (
                     <p className="text-sm font-medium text-[#1A1A2E] font-sans">
-                      Drop file or{" "}
+                      Drop <span className="text-[#F5A623]">{selectedDocType}</span> or{" "}
                       <span className="text-[#F5A623] underline underline-offset-2">browse</span>
                     </p>
-                    <p className="text-xs text-[#9CA3AF] mt-1">PDF, JPG, PNG — max 10 MB</p>
-                  </>
-                )}
-              </div>
-              <input id="doc-upload" type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only" onChange={handleFileChange} aria-label="Upload supporting document" />
-            </label>
-            {uploadedFile && (
-              <button
-                onClick={() => setUploadedFile(null)}
-                className="mt-2 w-full py-2 text-xs text-[#6B7280] font-sans border border-[#E5E7EB] bg-white hover:bg-[#F5F6F8] transition-colors rounded-sm"
-              >
-                Clear selection
-              </button>
+                  ) : (
+                    <p className="text-sm font-medium text-[#9CA3AF] font-sans">Select document type first</p>
+                  )}
+                  <p className="text-xs text-[#9CA3AF] mt-1">PDF, JPG, PNG — max 10 MB</p>
+                </div>
+                <input id="doc-upload" type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only" onChange={handleFileChange} disabled={!selectedDocType} aria-label="Upload supporting document" />
+              </label>
+            </div>
+
+            {uploadError && (
+              <p className="text-[10px] text-red-500 font-sans mt-1.5 flex items-center gap-1">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M6 3.5v3M6 8v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                {uploadError}
+              </p>
+            )}
+            {uploadSuccess && (
+              <p className="text-[10px] text-emerald-600 font-sans mt-1.5 flex items-center gap-1">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M3.5 6.5L5.5 8.5L8.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                {uploadSuccess}
+              </p>
             )}
           </section>
         </div>
