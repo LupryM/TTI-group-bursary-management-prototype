@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { REQUIRED_DOCS, getOrCreateGuestOwnerId, clearGuestOwnerId } from "@/lib/documents"
 
 const inputCls =
   "w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors placeholder:text-[#9CA3AF] rounded-sm disabled:bg-[#F5F6F8] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
@@ -59,13 +60,6 @@ const UNIVERSITIES = [
   "Walter Sisulu University",
 ]
 
-const REQUIRED_DOCS = [
-  { key: "sa_id", label: "South African ID (certified copy)" },
-  { key: "registration", label: "Proof of registration or acceptance letter" },
-  { key: "academic_record", label: "Full academic record with latest results" },
-  { key: "photograph", label: "Head and shoulders photograph" },
-]
-
 export function ApplicationForm() {
   const { user } = useAuth()
   const isStudent = user?.role === "student"
@@ -87,22 +81,78 @@ export function ApplicationForm() {
 
   const [formState, setFormState] = useState<FormState>("idle")
   const [refNumber, setRefNumber] = useState("")
+  const [ownerId, setOwnerId] = useState<string>("")
   const [docUploads, setDocUploads] = useState<Record<string, string | null>>(
     Object.fromEntries(REQUIRED_DOCS.map((d) => [d.key, null]))
   )
+  const [docError, setDocError] = useState<string | null>(null)
 
-  const handleDocUpload = (docKey: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Resolve ownerId: logged-in students reuse their user id so their existing
+  // uploads flow through; guests get a stable session id.
+  useEffect(() => {
+    const id = isStudent && user?.id ? user.id : getOrCreateGuestOwnerId()
+    setOwnerId(id)
+  }, [isStudent, user?.id])
+
+  // Preload existing documents for this owner so the form resumes where the
+  // applicant left off (whether refreshing the page or re-opening as a logged
+  // in student who already uploaded via their dashboard).
+  useEffect(() => {
+    if (!ownerId) return
+    let cancelled = false
+    fetch(`/api/documents?ownerId=${encodeURIComponent(ownerId)}`)
+      .then((r) => r.json())
+      .then((data: { docs: Record<string, { fileName: string } | null> }) => {
+        if (cancelled) return
+        const next: Record<string, string | null> = {}
+        for (const d of REQUIRED_DOCS) next[d.key] = data.docs?.[d.key]?.fileName ?? null
+        setDocUploads(next)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [ownerId])
+
+  const handleDocUpload = (docKey: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDocError(null)
     const file = e.target.files?.[0]
     if (!file) return
     const allowed = ["application/pdf", "image/jpeg", "image/png"]
-    if (!allowed.includes(file.type)) return
-    if (file.size > 10 * 1024 * 1024) return
-    setDocUploads((prev) => ({ ...prev, [docKey]: file.name }))
+    if (!allowed.includes(file.type)) {
+      setDocError("Only PDF, JPG, and PNG files are accepted.")
+      e.target.value = ""
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocError("File size must be 10 MB or less.")
+      e.target.value = ""
+      return
+    }
+    if (!ownerId) return
+    try {
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerId, docType: docKey, fileName: file.name }),
+      })
+      if (!res.ok) throw new Error("Upload failed")
+      setDocUploads((prev) => ({ ...prev, [docKey]: file.name }))
+    } catch {
+      setDocError("Could not save upload. Please try again.")
+    }
     e.target.value = ""
   }
 
-  const removeDoc = (docKey: string) => {
-    setDocUploads((prev) => ({ ...prev, [docKey]: null }))
+  const removeDoc = async (docKey: string) => {
+    if (!ownerId) return
+    try {
+      await fetch(
+        `/api/documents?ownerId=${encodeURIComponent(ownerId)}&docType=${encodeURIComponent(docKey)}`,
+        { method: "DELETE" }
+      )
+      setDocUploads((prev) => ({ ...prev, [docKey]: null }))
+    } catch {
+      setDocError("Could not remove document. Please try again.")
+    }
   }
 
   const uploadedCount = Object.values(docUploads).filter(Boolean).length
@@ -154,12 +204,15 @@ export function ApplicationForm() {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ownerId }),
       })
       if (!res.ok) throw new Error("Submission failed")
       const data = await res.json()
       setRefNumber(data.refNumber)
       setFormState("success")
+      // Guest ids are single-use: clear so a subsequent application starts
+      // fresh rather than inheriting the previous applicant's uploads.
+      if (!isStudent) clearGuestOwnerId()
     } catch {
       setFormState("error")
     }
@@ -169,6 +222,8 @@ export function ApplicationForm() {
     setFormState("idle")
     setErrors({})
     setDocUploads(Object.fromEntries(REQUIRED_DOCS.map((d) => [d.key, null])))
+    // Issue a new ownerId for the next application (students keep their id)
+    if (!isStudent) setOwnerId(getOrCreateGuestOwnerId())
     setForm({
       firstName: isStudent ? (user?.name.split(" ")[0] ?? "") : "",
       lastName: isStudent ? (user?.name.split(" ").slice(1).join(" ") ?? "") : "",
@@ -412,6 +467,7 @@ export function ApplicationForm() {
                 {uploadedCount} of {REQUIRED_DOCS.length} uploaded
               </span>
             </div>
+            {docError && <p className="text-[10px] text-red-500 font-sans mt-1">{docError}</p>}
             <FieldError msg={errors._docs} />
           </SectionCard>
 

@@ -1,12 +1,26 @@
 import { NextResponse } from "next/server"
 import { getDb } from "@/lib/db"
+import { REQUIRED_DOC_COUNT } from "@/lib/documents"
 
 export const dynamic = "force-dynamic"
 
 export function GET() {
   const db = getDb()
   const rows = db.prepare("SELECT * FROM applications ORDER BY rowid").all() as Record<string, unknown>[]
-  return NextResponse.json(rows.map(toAppJson))
+  // Compute docsComplete dynamically from student_documents joined by owner_id,
+  // so admin always sees real upload state rather than a stale boolean.
+  const countStmt = db.prepare(
+    "SELECT COUNT(*) as c FROM student_documents WHERE student_id = ?"
+  )
+  return NextResponse.json(
+    rows.map((row) => {
+      const ownerId = (row.owner_id as string | null) ?? ""
+      const uploadedCount = ownerId
+        ? (countStmt.get(ownerId) as { c: number }).c
+        : (row.docs_complete === 1 ? REQUIRED_DOC_COUNT : 0)
+      return toAppJson(row, uploadedCount)
+    })
+  )
 }
 
 export async function POST(request: Request) {
@@ -27,9 +41,20 @@ export async function POST(request: Request) {
   if (!refNumber) refNumber = `TTI-${new Date().getFullYear()}-${Date.now()}`
   const submittedDate = new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
 
+  const ownerId: string | null = body.ownerId || null
+  // Count docs already uploaded under this ownerId (via the documents API
+  // during form completion) so docs_complete reflects reality on submission.
+  let docsComplete = 0
+  if (ownerId) {
+    const c = (
+      db.prepare("SELECT COUNT(*) as c FROM student_documents WHERE student_id = ?").get(ownerId) as { c: number }
+    ).c
+    docsComplete = c >= REQUIRED_DOC_COUNT ? 1 : 0
+  }
+
   const stmt = db.prepare(`
-    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, id_number, email, phone, annual_income, need_statement, ref_number)
-    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @id_number, @email, @phone, @annual_income, @need_statement, @ref_number)
+    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, id_number, email, phone, annual_income, need_statement, ref_number, owner_id)
+    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @id_number, @email, @phone, @annual_income, @need_statement, @ref_number, @owner_id)
   `)
 
   stmt.run({
@@ -44,7 +69,7 @@ export async function POST(request: Request) {
     status: "Pending",
     submitted_date: submittedDate,
     id_verified: 0,
-    docs_complete: 0,
+    docs_complete: docsComplete,
     academic_avg: 0,
     id_number: body.idNumber || null,
     email: body.email || null,
@@ -52,6 +77,7 @@ export async function POST(request: Request) {
     annual_income: body.annualIncome || null,
     need_statement: body.needStatement || null,
     ref_number: refNumber,
+    owner_id: ownerId,
   })
 
   return NextResponse.json({ id: appId, refNumber, submittedDate }, { status: 201 })
@@ -104,7 +130,8 @@ export async function PATCH(request: Request) {
   return NextResponse.json(toAppJson(updated))
 }
 
-function toAppJson(row: Record<string, unknown>) {
+function toAppJson(row: Record<string, unknown>, uploadedCount?: number) {
+  const uploaded = uploadedCount ?? (row.docs_complete === 1 ? REQUIRED_DOC_COUNT : 0)
   return {
     id: row.id,
     studentName: row.student_name,
@@ -117,8 +144,11 @@ function toAppJson(row: Record<string, unknown>) {
     status: row.status,
     submittedDate: row.submitted_date,
     idVerified: row.id_verified === 1,
-    docsComplete: row.docs_complete === 1,
+    docsComplete: uploaded >= REQUIRED_DOC_COUNT,
+    docsUploadedCount: uploaded,
+    docsRequiredCount: REQUIRED_DOC_COUNT,
     academicAvg: row.academic_avg,
     refNumber: row.ref_number ?? undefined,
+    ownerId: row.owner_id ?? undefined,
   }
 }
