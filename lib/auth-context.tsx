@@ -33,6 +33,7 @@ interface AuthContextValue {
   loading: boolean
   login: (userId: string) => void
   logout: () => void
+  registerAndLogin: (newUser: MockUser) => void
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -41,6 +42,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   login: () => {},
   logout: () => {},
+  registerAndLogin: () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,8 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("tti_user_id")
   }
 
+  // Called after a successful signup: adds the freshly created user to the
+  // in-memory directory and signs them in immediately.
+  const registerAndLogin = (newUser: MockUser) => {
+    setUsers((prev) => [...prev, newUser])
+    setUser(newUser)
+    localStorage.setItem("tti_user_id", newUser.id)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, users, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, users, loading, login, logout, registerAndLogin }}>
       {children}
     </AuthContext.Provider>
   )
