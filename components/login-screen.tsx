@@ -3,8 +3,10 @@
 import { useState } from "react"
 import Image from "next/image"
 import { MockUser, useAuth } from "@/lib/auth-context"
+import { SignupForm } from "@/components/signup-form"
 
 type RoleTab = "student" | "funder" | "admin"
+type Mode = "signin" | "signup"
 
 const roleConfig: Record<RoleTab, { label: string; description: string; icon: React.ReactNode }> = {
   student: {
@@ -44,6 +46,7 @@ const roleConfig: Record<RoleTab, { label: string; description: string; icon: Re
 
 export function LoginScreen() {
   const { login, users, loading: usersLoading } = useAuth()
+  const [mode, setMode] = useState<Mode>("signin")
   const [activeRole, setActiveRole] = useState<RoleTab>("student")
   const [selectedUserId, setSelectedUserId] = useState<string>("")
   const [error, setError] = useState("")
@@ -102,6 +105,44 @@ export function LoginScreen() {
 
           {/* Card */}
           <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden shadow-sm">
+            {/* Mode switcher */}
+            <div className="flex border-b border-[#E5E7EB]">
+              <button
+                onClick={() => setMode("signin")}
+                className={[
+                  "flex-1 py-3 text-xs font-semibold uppercase tracking-widest font-sans transition-colors",
+                  mode === "signin"
+                    ? "bg-white text-[#1A2B4A] border-b-2 border-[#F5A623]"
+                    : "bg-[#F5F6F8] text-[#9CA3AF] hover:text-[#6B7280]",
+                ].join(" ")}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setMode("signup")}
+                className={[
+                  "flex-1 py-3 text-xs font-semibold uppercase tracking-widest font-sans transition-colors",
+                  mode === "signup"
+                    ? "bg-white text-[#1A2B4A] border-b-2 border-[#F5A623]"
+                    : "bg-[#F5F6F8] text-[#9CA3AF] hover:text-[#6B7280]",
+                ].join(" ")}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {mode === "signup" ? (
+              <>
+                <div className="px-6 py-5 border-b border-[#E5E7EB]">
+                  <h1 className="text-lg font-serif font-semibold text-[#1A2B4A]">Register as a student</h1>
+                  <p className="text-xs text-[#9CA3AF] mt-1 font-sans">
+                    Funders and administrators are provisioned by TTI.
+                  </p>
+                </div>
+                <SignupForm onCancel={() => setMode("signin")} />
+              </>
+            ) : (
+              <>
             {/* Card header */}
             <div className="px-6 py-5 border-b border-[#E5E7EB]">
               <h1 className="text-lg font-serif font-semibold text-[#1A2B4A]">Sign in to your portal</h1>
@@ -181,6 +222,8 @@ export function LoginScreen() {
                 {loading ? "Signing in…" : "Sign in"}
               </button>
             </div>
+              </>
+            )}
           </div>
 
           {/* Footer note */}
