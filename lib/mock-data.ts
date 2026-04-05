@@ -13,7 +13,11 @@ export interface Application {
   submittedDate: string
   idVerified: boolean
   docsComplete: boolean
+  docsUploadedCount?: number
+  docsRequiredCount?: number
   academicAvg: number
+  refNumber?: string
+  ownerId?: string
 }
 
 export interface Workshop {

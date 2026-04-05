@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { formatZAR, Workshop } from "@/lib/mock-data"
+import { REQUIRED_DOCS as REQUIRED_DOC_DEFS } from "@/lib/documents"
 
 // Map funder names to logo files
 const SPONSOR_LOGOS: Record<string, string> = {
@@ -13,28 +14,8 @@ const SPONSOR_LOGOS: Record<string, string> = {
   "Nedbank Foundation": "/nedbank-logo-png-transparent.png",
 }
 
-const REQUIRED_DOCS = [
-  "South African ID (certified)",
-  "Proof of Registration / Acceptance Letter",
-  "Full Academic Record",
-  "Head & Shoulders Photograph",
-]
-
-// Initial upload state seeded per known student — in production this comes from the DB
-const INITIAL_UPLOADS: Record<string, Record<string, string | null>> = {
-  "student-1": {
-    "South African ID (certified)": "ID_Thandi_Mokoena.pdf",
-    "Proof of Registration / Acceptance Letter": "UP_Registration_2026.pdf",
-    "Full Academic Record": "Transcript_UP22.pdf",
-    "Head & Shoulders Photograph": null,
-  },
-  "student-2": {
-    "South African ID (certified)": "ID_Sipho_Dlamini.pdf",
-    "Proof of Registration / Acceptance Letter": null,
-    "Full Academic Record": null,
-    "Head & Shoulders Photograph": null,
-  },
-}
+// Document types are keyed by the shared REQUIRED_DOCS definition so the
+// dashboard, application form and admin all speak the same language.
 
 const statusBadge = (variant: string) => {
   const base = "inline-flex items-center px-2.5 py-0.5 text-xs font-semibold tracking-wide font-sans rounded-sm"
@@ -57,9 +38,21 @@ export function StudentDashboard() {
   const [uploads, setUploads] = useState<Record<string, string | null>>({})
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
 
+  const docLabel = (key: string) => REQUIRED_DOC_DEFS.find((d) => d.key === key)?.label ?? key
+
   useEffect(() => {
     if (!user) return
-    setUploads(INITIAL_UPLOADS[user.id] ?? Object.fromEntries(REQUIRED_DOCS.map((d) => [d, null])))
+    // Load the student's documents from the shared documents table. This is
+    // the same source the application form writes to and the admin reads from.
+    fetch(`/api/documents?ownerId=${encodeURIComponent(user.id)}`)
+      .then((r) => r.json())
+      .then((data: { docs: Record<string, { fileName: string } | null> }) => {
+        const next: Record<string, string | null> = {}
+        for (const d of REQUIRED_DOC_DEFS) next[d.key] = data.docs?.[d.key]?.fileName ?? null
+        setUploads(next)
+      })
+      .catch(() => {})
+
     fetch(`/api/workshops?studentId=${user.id}`)
       .then((r) => r.json())
       .then((data: Workshop[]) => { setWorkshops(data); setWorkshopsLoading(false) })
@@ -69,9 +62,9 @@ export function StudentDashboard() {
   if (!user || user.role !== "student") return null
 
   const completedDocs = Object.values(uploads).filter(Boolean).length
-  const totalDocs = REQUIRED_DOCS.length
+  const totalDocs = REQUIRED_DOC_DEFS.length
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
     setUploadError(null)
     if (!selectedDocType) {
       setUploadError("Please select which document you are uploading before choosing a file.")
@@ -86,10 +79,20 @@ export function StudentDashboard() {
       setUploadError("File size must be 10 MB or less.")
       return
     }
-    setUploads((prev) => ({ ...prev, [selectedDocType]: file.name }))
-    setUploadSuccess(`"${selectedDocType}" uploaded successfully.`)
-    setSelectedDocType("")
-    setTimeout(() => setUploadSuccess(null), 3000)
+    try {
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerId: user.id, docType: selectedDocType, fileName: file.name }),
+      })
+      if (!res.ok) throw new Error("Upload failed")
+      setUploads((prev) => ({ ...prev, [selectedDocType]: file.name }))
+      setUploadSuccess(`"${docLabel(selectedDocType)}" uploaded successfully.`)
+      setSelectedDocType("")
+      setTimeout(() => setUploadSuccess(null), 3000)
+    } catch {
+      setUploadError("Could not save upload. Please try again.")
+    }
   }
 
   const bursaryDetails = [
@@ -245,12 +248,12 @@ export function StudentDashboard() {
           <section>
             <SectionHeader>Document Checklist</SectionHeader>
             <div className="bg-white border border-[#E5E7EB] rounded-sm">
-              {REQUIRED_DOCS.map((label, idx) => {
-                const fileName = uploads[label]
+              {REQUIRED_DOC_DEFS.map(({ key, label }, idx) => {
+                const fileName = uploads[key]
                 return (
                   <div
-                    key={label}
-                    className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== REQUIRED_DOCS.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
+                    key={key}
+                    className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== REQUIRED_DOC_DEFS.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
                   >
                     <span className={`flex-shrink-0 w-4 h-4 ${fileName ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
                       {fileName ? (
@@ -308,9 +311,9 @@ export function StudentDashboard() {
                 className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
               >
                 <option value="">Choose document…</option>
-                {REQUIRED_DOCS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}{uploads[d] ? " ✓ (replace)" : ""}
+                {REQUIRED_DOC_DEFS.map((d) => (
+                  <option key={d.key} value={d.key}>
+                    {d.label}{uploads[d.key] ? " ✓ (replace)" : ""}
                   </option>
                 ))}
               </select>
@@ -337,7 +340,7 @@ export function StudentDashboard() {
                   </svg>
                   {selectedDocType ? (
                     <p className="text-sm font-medium text-[#1A1A2E] font-sans">
-                      Drop <span className="text-[#F5A623]">{selectedDocType}</span> or{" "}
+                      Drop <span className="text-[#F5A623]">{docLabel(selectedDocType)}</span> or{" "}
                       <span className="text-[#F5A623] underline underline-offset-2">browse</span>
                     </p>
                   ) : (

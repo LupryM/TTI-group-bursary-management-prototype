@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { REQUIRED_DOCS, getOrCreateGuestOwnerId, clearGuestOwnerId } from "@/lib/documents"
 
 const inputCls =
   "w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors placeholder:text-[#9CA3AF] rounded-sm disabled:bg-[#F5F6F8] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
@@ -80,6 +81,82 @@ export function ApplicationForm() {
 
   const [formState, setFormState] = useState<FormState>("idle")
   const [refNumber, setRefNumber] = useState("")
+  const [ownerId, setOwnerId] = useState<string>("")
+  const [docUploads, setDocUploads] = useState<Record<string, string | null>>(
+    Object.fromEntries(REQUIRED_DOCS.map((d) => [d.key, null]))
+  )
+  const [docError, setDocError] = useState<string | null>(null)
+
+  // Resolve ownerId: logged-in students reuse their user id so their existing
+  // uploads flow through; guests get a stable session id.
+  useEffect(() => {
+    const id = isStudent && user?.id ? user.id : getOrCreateGuestOwnerId()
+    setOwnerId(id)
+  }, [isStudent, user?.id])
+
+  // Preload existing documents for this owner so the form resumes where the
+  // applicant left off (whether refreshing the page or re-opening as a logged
+  // in student who already uploaded via their dashboard).
+  useEffect(() => {
+    if (!ownerId) return
+    let cancelled = false
+    fetch(`/api/documents?ownerId=${encodeURIComponent(ownerId)}`)
+      .then((r) => r.json())
+      .then((data: { docs: Record<string, { fileName: string } | null> }) => {
+        if (cancelled) return
+        const next: Record<string, string | null> = {}
+        for (const d of REQUIRED_DOCS) next[d.key] = data.docs?.[d.key]?.fileName ?? null
+        setDocUploads(next)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [ownerId])
+
+  const handleDocUpload = (docKey: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDocError(null)
+    const file = e.target.files?.[0]
+    if (!file) return
+    const allowed = ["application/pdf", "image/jpeg", "image/png"]
+    if (!allowed.includes(file.type)) {
+      setDocError("Only PDF, JPG, and PNG files are accepted.")
+      e.target.value = ""
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocError("File size must be 10 MB or less.")
+      e.target.value = ""
+      return
+    }
+    if (!ownerId) return
+    try {
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerId, docType: docKey, fileName: file.name }),
+      })
+      if (!res.ok) throw new Error("Upload failed")
+      setDocUploads((prev) => ({ ...prev, [docKey]: file.name }))
+    } catch {
+      setDocError("Could not save upload. Please try again.")
+    }
+    e.target.value = ""
+  }
+
+  const removeDoc = async (docKey: string) => {
+    if (!ownerId) return
+    try {
+      await fetch(
+        `/api/documents?ownerId=${encodeURIComponent(ownerId)}&docType=${encodeURIComponent(docKey)}`,
+        { method: "DELETE" }
+      )
+      setDocUploads((prev) => ({ ...prev, [docKey]: null }))
+    } catch {
+      setDocError("Could not remove document. Please try again.")
+    }
+  }
+
+  const uploadedCount = Object.values(docUploads).filter(Boolean).length
+  const allDocsUploaded = uploadedCount === REQUIRED_DOCS.length
 
   const set = (field: keyof FormData) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -88,12 +165,12 @@ export function ApplicationForm() {
   const setCheck = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, consent: e.target.checked }))
 
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData | "_form", string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData | "_form" | "_docs", string>>>({})
 
   const wordCount = form.needStatement.trim().split(/\s+/).filter(Boolean).length
 
   const validateForm = (): boolean => {
-    const errs: Partial<Record<keyof FormData | "_form", string>> = {}
+    const errs: Partial<Record<keyof FormData | "_form" | "_docs", string>> = {}
     if (!form.firstName.trim()) errs.firstName = "First name is required."
     if (!form.lastName.trim()) errs.lastName = "Last name is required."
     if (!form.idNumber.trim()) errs.idNumber = "SA ID number is required."
@@ -108,6 +185,10 @@ export function ApplicationForm() {
     else if (!/^\d[\d\s.,]*$/.test(form.annualIncome.trim().replace(/^R\s?/, "")))
       errs.annualIncome = "Enter a numeric value (e.g. 120000 or R 120,000)."
     if (wordCount < 100) errs.needStatement = `Minimum 100 words required (currently ${wordCount}).`
+    if (!allDocsUploaded) {
+      const missing = REQUIRED_DOCS.filter((d) => !docUploads[d.key]).map((d) => d.label)
+      errs._docs = `Please upload: ${missing.join(", ")}.`
+    }
     if (!form.consent) errs._form = "You must accept the consent declaration."
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -123,12 +204,15 @@ export function ApplicationForm() {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ownerId }),
       })
       if (!res.ok) throw new Error("Submission failed")
       const data = await res.json()
       setRefNumber(data.refNumber)
       setFormState("success")
+      // Guest ids are single-use: clear so a subsequent application starts
+      // fresh rather than inheriting the previous applicant's uploads.
+      if (!isStudent) clearGuestOwnerId()
     } catch {
       setFormState("error")
     }
@@ -136,6 +220,10 @@ export function ApplicationForm() {
 
   const resetForm = () => {
     setFormState("idle")
+    setErrors({})
+    setDocUploads(Object.fromEntries(REQUIRED_DOCS.map((d) => [d.key, null])))
+    // Issue a new ownerId for the next application (students keep their id)
+    if (!isStudent) setOwnerId(getOrCreateGuestOwnerId())
     setForm({
       firstName: isStudent ? (user?.name.split(" ")[0] ?? "") : "",
       lastName: isStudent ? (user?.name.split(" ").slice(1).join(" ") ?? "") : "",
@@ -313,6 +401,76 @@ export function ApplicationForm() {
             </div>
           </SectionCard>
 
+          {/* Document Uploads */}
+          <SectionCard title="Supporting Documents">
+            <p className="text-xs text-[#6B7280] font-sans mb-4 leading-relaxed">
+              Upload all required documents below. Accepted formats: PDF, JPG, PNG (max 10 MB each).
+            </p>
+            <div className="flex flex-col gap-3">
+              {REQUIRED_DOCS.map((doc) => {
+                const fileName = docUploads[doc.key]
+                return (
+                  <div key={doc.key} className={`flex items-center gap-3 border rounded-sm px-4 py-3 transition-colors ${fileName ? "border-emerald-200 bg-emerald-50/30" : "border-[#E5E7EB] bg-white"}`}>
+                    <span className={`flex-shrink-0 w-4 h-4 ${fileName ? "text-emerald-500" : "text-[#D1D5DB]"}`} aria-hidden="true">
+                      {fileName ? (
+                        <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                          <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      )}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[#1A1A2E] font-sans">{doc.label}</p>
+                      {fileName && (
+                        <p className="text-[10px] text-emerald-600 font-mono truncate mt-0.5">{fileName}</p>
+                      )}
+                    </div>
+                    {fileName ? (
+                      <button
+                        type="button"
+                        onClick={() => removeDoc(doc.key)}
+                        className="text-[10px] font-semibold text-red-500 hover:text-red-700 font-sans transition-colors"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <label className="flex-shrink-0 cursor-pointer">
+                        <span className="text-[10px] font-semibold text-[#F5A623] hover:text-[#D4891A] font-sans transition-colors underline underline-offset-2">
+                          Upload
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="sr-only"
+                          onChange={handleDocUpload(doc.key)}
+                          aria-label={`Upload ${doc.label}`}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {/* Progress bar */}
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#F5A623] rounded-full transition-all"
+                  style={{ width: `${(uploadedCount / REQUIRED_DOCS.length) * 100}%` }}
+                />
+              </div>
+              <span className={`text-[10px] font-sans whitespace-nowrap ${allDocsUploaded ? "text-emerald-600 font-semibold" : "text-[#9CA3AF]"}`}>
+                {uploadedCount} of {REQUIRED_DOCS.length} uploaded
+              </span>
+            </div>
+            {docError && <p className="text-[10px] text-red-500 font-sans mt-1">{docError}</p>}
+            <FieldError msg={errors._docs} />
+          </SectionCard>
+
           {/* Consent */}
           <div className={`bg-white border rounded-sm p-5 mb-6 ${errors._form ? "border-red-300 bg-red-50/20" : "border-[#E5E7EB]"}`}>
             <label className="flex items-start gap-3 cursor-pointer">
@@ -367,30 +525,35 @@ export function ApplicationForm() {
         {/* Sidebar */}
         <aside className="w-full lg:w-72 flex-shrink-0 flex flex-col gap-5 lg:sticky lg:top-24">
           <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-[#E5E7EB] bg-[#1A2B4A]">
-              <h3 className="text-[10px] font-semibold uppercase tracking-widest text-white font-sans">Supporting Documents</h3>
+            <div className="px-5 py-3 border-b border-[#E5E7EB] bg-[#1A2B4A] flex items-center justify-between">
+              <h3 className="text-[10px] font-semibold uppercase tracking-widest text-white font-sans">Document Status</h3>
+              <span className="text-[10px] font-mono text-white/60">{uploadedCount}/{REQUIRED_DOCS.length}</span>
             </div>
             <ul className="divide-y divide-[#E5E7EB]">
-              {[
-                "South African ID (certified copy)",
-                "Proof of registration or acceptance letter",
-                "Full academic record with latest results",
-                "Head and shoulders photograph",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-3 px-5 py-3.5">
-                  <span className="flex-shrink-0 mt-0.5 text-[#F5A623]" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
-                      <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
-                    </svg>
-                  </span>
-                  <span className="text-xs text-[#4B5563] font-sans leading-relaxed">{item}</span>
-                </li>
-              ))}
+              {REQUIRED_DOCS.map((doc) => {
+                const uploaded = !!docUploads[doc.key]
+                return (
+                  <li key={doc.key} className="flex items-start gap-3 px-5 py-3.5">
+                    <span className={`flex-shrink-0 mt-0.5 ${uploaded ? "text-emerald-500" : "text-[#D1D5DB]"}`} aria-hidden="true">
+                      {uploaded ? (
+                        <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                          <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" fill="none" width="14" height="14">
+                          <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={`text-xs font-sans leading-relaxed ${uploaded ? "text-[#1A1A2E]" : "text-[#9CA3AF]"}`}>{doc.label}</span>
+                  </li>
+                )
+              })}
             </ul>
             <div className="px-5 py-3.5 border-t border-[#E5E7EB] bg-[#F5F6F8]">
-              <p className="text-[10px] text-[#9CA3AF] leading-relaxed font-sans uppercase tracking-wide">
-                Incomplete applications will not be considered.
+              <p className={`text-[10px] leading-relaxed font-sans uppercase tracking-wide ${allDocsUploaded ? "text-emerald-600" : "text-[#9CA3AF]"}`}>
+                {allDocsUploaded ? "All documents uploaded." : "Incomplete applications will not be considered."}
               </p>
             </div>
           </div>

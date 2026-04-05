@@ -66,7 +66,8 @@ function initSchema(db: Database.Database) {
       phone TEXT,
       annual_income TEXT,
       need_statement TEXT,
-      ref_number TEXT
+      ref_number TEXT,
+      owner_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS funder_students (
@@ -120,6 +121,15 @@ function initSchema(db: Database.Database) {
       old_value TEXT,
       new_value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS student_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id TEXT NOT NULL,
+      doc_type TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      uploaded_at TEXT NOT NULL,
+      UNIQUE(student_id, doc_type)
+    );
   `)
 }
 
@@ -150,23 +160,42 @@ function seedIfEmpty(db: Database.Database) {
 
   // ── Applications ───────────────────────────────────────────────────────────
   const insertApp = db.prepare(`
-    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg)
-    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg)
+    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, owner_id)
+    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @owner_id)
   `)
 
   const apps = [
-    { id: "app-001", student_name: "Thandi Mokoena", student_no: "UP22/0045812", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder: "Anglo American plc", amount: 48500, status: "Approved", submitted_date: "12 Jan 2026", id_verified: 1, docs_complete: 1, academic_avg: 72 },
-    { id: "app-002", student_name: "Sipho Dlamini", student_no: "WITS21/0033124", institution: "University of the Witwatersrand", programme: "BCom Accounting", year: "2nd Year", funder: "Sasol Bursaries", amount: 42000, status: "Under Review", submitted_date: "18 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 65 },
-    { id: "app-003", student_name: "Anele Khumalo", student_no: "UCT24/0071203", institution: "University of Cape Town", programme: "BEng Mechanical", year: "1st Year", funder: "Anglo American plc", amount: 55000, status: "Pending", submitted_date: "21 Jan 2026", id_verified: 0, docs_complete: 0, academic_avg: 78 },
-    { id: "app-004", student_name: "Nomvula Zulu", student_no: "UKZN23/0019877", institution: "University of KwaZulu-Natal", programme: "BSocSci Psychology", year: "2nd Year", funder: "Sasol Bursaries", amount: 38000, status: "Approved", submitted_date: "3 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 70 },
-    { id: "app-005", student_name: "Lwazi Motha", student_no: "SU22/0088341", institution: "Stellenbosch University", programme: "BEng Civil", year: "3rd Year", funder: "Anglo American plc", amount: 52000, status: "Rejected", submitted_date: "7 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 48 },
-    { id: "app-006", student_name: "Karabo Sithole", student_no: "TUT23/0041200", institution: "Tshwane University of Technology", programme: "National Diploma IT", year: "1st Year", funder: "Sasol Bursaries", amount: 35000, status: "Pending", submitted_date: "10 Feb 2026", id_verified: 0, docs_complete: 0, academic_avg: 61 },
+    { id: "app-001", student_name: "Thandi Mokoena", student_no: "UP22/0045812", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder: "Anglo American plc", amount: 48500, status: "Approved", submitted_date: "12 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 72, owner_id: "student-1" },
+    { id: "app-002", student_name: "Sipho Dlamini", student_no: "WITS21/0033124", institution: "University of the Witwatersrand", programme: "BCom Accounting", year: "2nd Year", funder: "Sasol Bursaries", amount: 42000, status: "Under Review", submitted_date: "18 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 65, owner_id: "student-2" },
+    { id: "app-003", student_name: "Anele Khumalo", student_no: "UCT24/0071203", institution: "University of Cape Town", programme: "BEng Mechanical", year: "1st Year", funder: "Anglo American plc", amount: 55000, status: "Pending", submitted_date: "21 Jan 2026", id_verified: 0, docs_complete: 0, academic_avg: 78, owner_id: null },
+    { id: "app-004", student_name: "Nomvula Zulu", student_no: "UKZN23/0019877", institution: "University of KwaZulu-Natal", programme: "BSocSci Psychology", year: "2nd Year", funder: "Sasol Bursaries", amount: 38000, status: "Approved", submitted_date: "3 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 70, owner_id: null },
+    { id: "app-005", student_name: "Lwazi Motha", student_no: "SU22/0088341", institution: "Stellenbosch University", programme: "BEng Civil", year: "3rd Year", funder: "Anglo American plc", amount: 52000, status: "Rejected", submitted_date: "7 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 48, owner_id: null },
+    { id: "app-006", student_name: "Karabo Sithole", student_no: "TUT23/0041200", institution: "Tshwane University of Technology", programme: "National Diploma IT", year: "1st Year", funder: "Sasol Bursaries", amount: 35000, status: "Pending", submitted_date: "10 Feb 2026", id_verified: 0, docs_complete: 0, academic_avg: 61, owner_id: null },
   ]
 
   const seedApps = db.transaction(() => {
     for (const a of apps) insertApp.run(a)
   })
   seedApps()
+
+  // ── Student Documents (seeded for logged-in demo students) ────────────────
+  const insertDoc = db.prepare(`
+    INSERT INTO student_documents (student_id, doc_type, file_name, uploaded_at)
+    VALUES (?, ?, ?, ?)
+  `)
+  const seededDocs: [string, string, string][] = [
+    // Thandi has 3 of 4 uploaded (missing photograph)
+    ["student-1", "sa_id", "ID_Thandi_Mokoena.pdf"],
+    ["student-1", "registration", "UP_Registration_2026.pdf"],
+    ["student-1", "academic_record", "Transcript_UP22.pdf"],
+    // Sipho has 1 of 4 uploaded
+    ["student-2", "sa_id", "ID_Sipho_Dlamini.pdf"],
+  ]
+  const seedDocs = db.transaction(() => {
+    const now = new Date().toISOString()
+    for (const [sid, key, name] of seededDocs) insertDoc.run(sid, key, name, now)
+  })
+  seedDocs()
 
   // ── Funder Students ────────────────────────────────────────────────────────
   const insertFS = db.prepare(`

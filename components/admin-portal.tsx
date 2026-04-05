@@ -294,7 +294,9 @@ function AdminApplications() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${selected.docsComplete ? "bg-emerald-400" : "bg-[#D1D5DB]"}`} />
-                  <span className="text-xs text-[#6B7280] font-sans">Docs Complete</span>
+                  <span className="text-xs text-[#6B7280] font-sans">
+                    Docs {selected.docsUploadedCount ?? 0}/{selected.docsRequiredCount ?? 4}
+                  </span>
                 </div>
               </div>
 
