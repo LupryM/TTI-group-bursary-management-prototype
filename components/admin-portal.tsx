@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { formatZAR, progressPct, Application, FunderStudent } from "@/lib/mock-data"
@@ -55,6 +56,7 @@ interface FunderOption {
 }
 
 function AdminApplications() {
+  const router = useRouter()
   const [apps, setApps] = useState<Application[]>([])
   const [funders, setFunders] = useState<FunderOption[]>([])
   const [loadingData, setLoadingData] = useState(true)
@@ -74,6 +76,10 @@ function AdminApplications() {
     setReviewApp(app)
     setReviewIdVerified(app.idVerified)
     setReviewDocsComplete(app.docsComplete)
+    // Auto-transition Submitted → Under Review so the status tracking reflects active review
+    if (app.status === "Submitted") {
+      updateStatus(app.id, "Under Review")
+    }
   }
 
   const closeReview = () => {
@@ -119,7 +125,7 @@ function AdminApplications() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const updateStatus = (id: string, status: AppStatus) => {
+  const updateStatus = (id: string, status: AppStatus, onSuccess?: () => void) => {
     setActionLoading(true)
     fetch("/api/applications", {
       method: "PATCH",
@@ -133,7 +139,14 @@ function AdminApplications() {
         // Reset filter to All so the updated application stays visible
         setFilterStatus("All")
         setActionLoading(false)
-        showToast(`Application ${status.toLowerCase()} successfully.`)
+        showToast(
+          status === "Approved"
+            ? "Application approved. Student added to Skills Tracker & Treasury."
+            : `Application ${status.toLowerCase()} successfully.`
+        )
+        onSuccess?.()
+        // Invalidate Next.js router cache so Skills Tracker & Treasury show fresh data
+        if (status === "Approved") router.refresh()
       })
       .catch(() => {
         setActionLoading(false)
@@ -567,15 +580,15 @@ function AdminApplications() {
                 )}
                 <div className="flex gap-2">
                   <button
-                    disabled={actionLoading || !reviewIdVerified || !reviewDocsComplete}
-                    onClick={() => { updateStatus(reviewApp.id, "Approved"); closeReview() }}
+                    disabled={actionLoading || verifyLoading || !reviewIdVerified || !reviewDocsComplete}
+                    onClick={() => updateStatus(reviewApp.id, "Approved", closeReview)}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {actionLoading ? "Processing…" : "Approve Application"}
                   </button>
                   <button
-                    disabled={actionLoading}
-                    onClick={() => { updateStatus(reviewApp.id, "Rejected"); closeReview() }}
+                    disabled={actionLoading || verifyLoading}
+                    onClick={() => updateStatus(reviewApp.id, "Rejected", closeReview)}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-red-500 text-white hover:bg-red-600 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
                   >
                     Reject
