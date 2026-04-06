@@ -65,6 +65,41 @@ function AdminApplications() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null)
   const [assignFunder, setAssignFunder] = useState("")
   const [assignAmount, setAssignAmount] = useState("")
+  const [reviewApp, setReviewApp] = useState<Application | null>(null)
+  const [reviewIdVerified, setReviewIdVerified] = useState(false)
+  const [reviewDocsComplete, setReviewDocsComplete] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+
+  const openReview = (app: Application) => {
+    setReviewApp(app)
+    setReviewIdVerified(app.idVerified)
+    setReviewDocsComplete(app.docsComplete)
+  }
+
+  const closeReview = () => {
+    setReviewApp(null)
+  }
+
+  const patchVerification = async (id: string, updates: { id_verified?: boolean; docs_complete?: boolean }) => {
+    setVerifyLoading(true)
+    try {
+      const res = await fetch("/api/applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...updates }),
+      })
+      if (!res.ok) throw new Error()
+      const updated: Application = await res.json()
+      setApps((prev) => prev.map((a) => a.id === id ? updated : a))
+      setSelected((prev) => prev?.id === id ? updated : prev)
+      if (updates.id_verified !== undefined) setReviewIdVerified(updates.id_verified)
+      if (updates.docs_complete !== undefined) setReviewDocsComplete(updates.docs_complete)
+    } catch {
+      showToast("Failed to update verification.", "error")
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -275,10 +310,22 @@ function AdminApplications() {
                   <td className="px-4 py-3">
                     <span className={statusBadge(app.status)}>{adminStatusLabel(app.status)}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-[#F5A623] font-sans hover:underline">
-                      {app.status === "Submitted" ? "Review" : "View"}
-                    </span>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    {(app.status === "Submitted" || app.status === "Under Review") ? (
+                      <button
+                        onClick={() => openReview(app)}
+                        className="px-2.5 py-1 text-[10px] font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        Review →
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setSelected(app)}
+                        className="text-xs text-[#F5A623] font-sans hover:underline cursor-pointer"
+                      >
+                        View
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -389,29 +436,155 @@ function AdminApplications() {
                 <span className={statusBadge(selected.status)}>{adminStatusLabel(selected.status)}</span>
               </div>
 
-              {selected.status === "Submitted" && (
-                <div className="flex gap-2">
-                  <button
-                    disabled={actionLoading || assignFunder !== "" || assignAmount !== ""}
-                    title={assignFunder !== "" || assignAmount !== "" ? "Click 'Save Assignment' first!" : ""}
-                    onClick={() => updateStatus(selected.id, "Approved")}
-                    className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {actionLoading ? "Saving…" : "Approve"}
-                  </button>
-                  <button
-                    disabled={actionLoading}
-                    onClick={() => updateStatus(selected.id, "Rejected")}
-                    className="flex-1 py-2.5 text-xs font-semibold font-sans bg-red-500 text-white hover:bg-red-600 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                </div>
+              {(selected.status === "Submitted" || selected.status === "Under Review") && (
+                <button
+                  onClick={() => openReview(selected)}
+                  className="w-full py-2.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer"
+                >
+                  Open Review Panel →
+                </button>
               )}
             </div>
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Review Modal ─────────────────────────────────────────────────────── */}
+      {reviewApp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={closeReview}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review application"
+        >
+          <div
+            className="bg-white border border-[#E5E7EB] rounded-sm shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="px-6 py-4 border-b border-[#E5E7EB] bg-[#1A2B4A] flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60 font-sans">Review Application</span>
+                <p className="text-sm font-semibold text-white mt-0.5">{reviewApp.studentName}</p>
+              </div>
+              <button onClick={closeReview} className="text-white/50 hover:text-white transition-colors p-1" aria-label="Close review panel">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-5">
+              {/* Section 1: Applicant Profile */}
+              <div>
+                <SectionHeader>Applicant Profile</SectionHeader>
+                <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm p-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                  {[
+                    { label: "Name", value: reviewApp.studentName },
+                    { label: "Student No.", value: reviewApp.studentNo || "—" },
+                    { label: "Institution", value: reviewApp.institution },
+                    { label: "Programme", value: reviewApp.programme },
+                    { label: "Year", value: reviewApp.year },
+                    { label: "Reference", value: reviewApp.refNumber || "—" },
+                  ].map((row) => (
+                    <div key={row.label}>
+                      <p className="text-[9px] uppercase tracking-widest text-[#9CA3AF] mb-0.5 font-sans">{row.label}</p>
+                      <p className="text-xs font-medium text-[#1A1A2E] font-sans leading-snug">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 2: Academic & Financial Need */}
+              <div>
+                <SectionHeader>Academic &amp; Financial Need</SectionHeader>
+                <div className="flex flex-col gap-2">
+                  <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm px-4 py-3 flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans">Academic Average</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold font-mono ${(reviewApp.academicAvg ?? 0) < 60 ? "text-red-600" : "text-emerald-600"}`}>
+                        {reviewApp.academicAvg ?? 0}%
+                      </span>
+                      {(reviewApp.academicAvg ?? 0) < 60 && (
+                        <span className="text-[9px] font-semibold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-sm whitespace-nowrap">Requires Override</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm px-4 py-3 flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans">Annual Household Income</span>
+                    <span className="text-xs font-medium text-[#1A1A2E] font-sans">{reviewApp.annualIncome || "Not provided"}</span>
+                  </div>
+                  {reviewApp.needStatement && (
+                    <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] mb-2 font-sans">Financial Need Statement</p>
+                      <p className="text-xs text-[#6B7280] leading-relaxed line-clamp-5 font-sans">{reviewApp.needStatement}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 3: Verification Checkpoints */}
+              <div>
+                <SectionHeader>Verification Checkpoints</SectionHeader>
+                <div className="flex flex-col gap-2">
+                  <label className={`flex items-start gap-3 p-3 border rounded-sm cursor-pointer transition-colors select-none ${reviewIdVerified ? "border-emerald-200 bg-emerald-50/50" : "border-[#E5E7EB] bg-white hover:bg-[#F5F6F8]"}`}>
+                    <input
+                      type="checkbox"
+                      checked={reviewIdVerified}
+                      disabled={verifyLoading}
+                      onChange={(e) => patchVerification(reviewApp.id, { id_verified: e.target.checked })}
+                      className="mt-0.5 flex-shrink-0 w-4 h-4 accent-emerald-600 cursor-pointer"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-[#1A1A2E] font-sans">Verify South African ID</p>
+                      <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-sans">Confirm the applicant&apos;s 13-digit SA ID has been validated against Home Affairs records</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-3 border rounded-sm cursor-pointer transition-colors select-none ${reviewDocsComplete ? "border-emerald-200 bg-emerald-50/50" : "border-[#E5E7EB] bg-white hover:bg-[#F5F6F8]"}`}>
+                    <input
+                      type="checkbox"
+                      checked={reviewDocsComplete}
+                      disabled={verifyLoading}
+                      onChange={(e) => patchVerification(reviewApp.id, { docs_complete: e.target.checked })}
+                      className="mt-0.5 flex-shrink-0 w-4 h-4 accent-emerald-600 cursor-pointer"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-[#1A1A2E] font-sans">Documents Complete &amp; Valid</p>
+                      <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-sans">All required documents have been reviewed and confirmed authentic ({reviewApp.docsUploadedCount ?? 0}/{reviewApp.docsRequiredCount ?? 4} uploaded)</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Section 4: Decision */}
+              <div className="border-t border-[#E5E7EB] pt-4">
+                {(!reviewIdVerified || !reviewDocsComplete) && (
+                  <p className="text-[10px] text-[#9CA3AF] font-sans mb-3 text-center tracking-wide">
+                    Please verify the ID and documents to enable approval.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    disabled={actionLoading || !reviewIdVerified || !reviewDocsComplete}
+                    onClick={() => { updateStatus(reviewApp.id, "Approved"); closeReview() }}
+                    className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {actionLoading ? "Processing…" : "Approve Application"}
+                  </button>
+                  <button
+                    disabled={actionLoading}
+                    onClick={() => { updateStatus(reviewApp.id, "Rejected"); closeReview() }}
+                    className="flex-1 py-2.5 text-xs font-semibold font-sans bg-red-500 text-white hover:bg-red-600 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )

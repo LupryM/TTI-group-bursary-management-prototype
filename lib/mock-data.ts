@@ -16,6 +16,8 @@ export interface Application {
   docsUploadedCount?: number
   docsRequiredCount?: number
   academicAvg: number
+  annualIncome?: string
+  needStatement?: string
   refNumber?: string
   ownerId?: string
 }

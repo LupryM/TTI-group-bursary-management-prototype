@@ -41,6 +41,7 @@ interface FormData {
   year: string
   annualIncome: string
   needStatement: string
+  academicAvg: string
   consent: boolean
 }
 
@@ -76,6 +77,7 @@ export function ApplicationForm() {
     year: isStudent ? (user?.year ?? "") : "",
     annualIncome: "",
     needStatement: "",
+    academicAvg: "",
     consent: false,
   })
 
@@ -181,6 +183,11 @@ export function ApplicationForm() {
     if (!form.university) errs.university = "Please select an institution."
     if (!form.programme.trim()) errs.programme = "Programme is required."
     if (!form.year) errs.year = "Please select year of study."
+    if (!form.academicAvg.trim()) errs.academicAvg = "Academic average is required."
+    else {
+      const avg = parseFloat(form.academicAvg)
+      if (isNaN(avg) || avg < 0 || avg > 100) errs.academicAvg = "Enter a percentage between 0 and 100."
+    }
     if (!form.annualIncome.trim()) errs.annualIncome = "Household income is required."
     else if (!/^\d[\d\s.,]*$/.test(form.annualIncome.trim().replace(/^R\s?/, "")))
       errs.annualIncome = "Enter a numeric value (e.g. 120000 or R 120,000)."
@@ -343,6 +350,22 @@ export function ApplicationForm() {
                   ))}
                 </select>
                 <FieldError msg={errors.year} />
+              </div>
+              <div>
+                <label htmlFor="app-avg" className={labelCls}>Latest Academic Average (%)</label>
+                <input
+                  id="app-avg"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  className={errors.academicAvg ? inputErrCls : inputCls}
+                  value={form.academicAvg}
+                  onChange={set("academicAvg")}
+                  placeholder="e.g. 72"
+                />
+                <p className="text-[10px] text-[#9CA3AF] font-sans mt-1">Please enter your overall average from your most recent academic transcript.</p>
+                <FieldError msg={errors.academicAvg} />
               </div>
             </div>
           </SectionCard>

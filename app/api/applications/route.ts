@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       submitted_date: submittedDate,
       id_verified: 0,
       docs_complete: docsComplete,
-      academic_avg: 0,
+      academic_avg: parseFloat(body.academicAvg) || 0,
       id_number: body.idNumber || null,
       email: body.email || null,
       phone: body.phone || null,
@@ -106,9 +106,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "id is required" }, { status: 400 })
   }
 
-  // status is only required for status-change requests, not funder/amount updates
-  if (!status && body.funder === undefined && body.amount === undefined) {
-    return NextResponse.json({ error: "Provide status, funder, or amount" }, { status: 400 })
+  // status is only required for status-change requests, not funder/amount/verification updates
+  if (!status && body.funder === undefined && body.amount === undefined && body.id_verified === undefined && body.docs_complete === undefined) {
+    return NextResponse.json({ error: "Provide status, funder, amount, or verification fields" }, { status: 400 })
   }
 
   const changedAt = new Date().toISOString()
@@ -119,6 +119,22 @@ export async function PATCH(request: Request) {
   if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const auditSql = "INSERT INTO application_audit (application_id, changed_at, changed_by, field, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)"
+
+  // Handle verification field updates
+  if (body.id_verified !== undefined || body.docs_complete !== undefined) {
+    if (body.id_verified !== undefined) {
+      const val = body.id_verified ? 1 : 0
+      await db.execute({ sql: auditSql, args: [id, changedAt, changedBy, "id_verified", String(current.id_verified ?? 0), String(val)] })
+      await db.execute({ sql: "UPDATE applications SET id_verified = ? WHERE id = ?", args: [val, id] })
+    }
+    if (body.docs_complete !== undefined) {
+      const val = body.docs_complete ? 1 : 0
+      await db.execute({ sql: auditSql, args: [id, changedAt, changedBy, "docs_complete", String(current.docs_complete ?? 0), String(val)] })
+      await db.execute({ sql: "UPDATE applications SET docs_complete = ? WHERE id = ?", args: [val, id] })
+    }
+    const updatedResult = await db.execute({ sql: "SELECT * FROM applications WHERE id = ?", args: [id] })
+    return NextResponse.json(toAppJson(updatedResult.rows[0] as Record<string, unknown>))
+  }
 
   // Handle funder/amount assignment separately
   if (body.funder !== undefined || body.amount !== undefined) {
@@ -255,6 +271,8 @@ function toAppJson(row: Record<string, unknown>, uploadedCount?: number) {
     docsUploadedCount: uploaded,
     docsRequiredCount: REQUIRED_DOC_COUNT,
     academicAvg: row.academic_avg,
+    annualIncome: (row.annual_income as string | null) ?? undefined,
+    needStatement: (row.need_statement as string | null) ?? undefined,
     refNumber: row.ref_number ?? undefined,
     ownerId: row.owner_id ?? undefined,
   }
