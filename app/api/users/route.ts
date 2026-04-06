@@ -1,27 +1,28 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { getReadyDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-export function GET(request: Request) {
-  const db = getDb()
+export async function GET(request: Request) {
+  const db = await getReadyDb()
   const { searchParams } = new URL(request.url)
   const id = searchParams.get("id")
 
   if (id) {
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id)
+    const result = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] })
+    const user = result.rows[0]
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
     return NextResponse.json(toUserJson(user as Record<string, unknown>))
   }
 
-  const users = db.prepare("SELECT * FROM users").all() as Record<string, unknown>[]
-  return NextResponse.json(users.map(toUserJson))
+  const result = await db.execute("SELECT * FROM users")
+  return NextResponse.json((result.rows as Record<string, unknown>[]).map(toUserJson))
 }
 
 // Student signup — creates a new student account. Funders/admins are
 // provisioned internally and cannot self-register.
 export async function POST(request: Request) {
-  const db = getDb()
+  const db = await getReadyDb()
   const body = await request.json()
 
   const firstName = String(body.firstName || "").trim()
@@ -45,23 +46,25 @@ export async function POST(request: Request) {
   }
 
   // Email must be unique
-  const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = ?").get(email)
-  if (existing) {
+  const existingResult = await db.execute({ sql: "SELECT id FROM users WHERE LOWER(email) = ?", args: [email] })
+  if (existingResult.rows.length > 0) {
     return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 })
   }
 
   // Generate student id from the next available slot so ids stay stable even
   // if older accounts are removed.
-  const maxRow = db.prepare(
+  const maxRowResult = await db.execute(
     "SELECT COALESCE(MAX(CAST(SUBSTR(id, 9) AS INTEGER)), 0) as m FROM users WHERE id LIKE 'student-%'"
-  ).get() as { m: number }
-  const id = `student-${maxRow.m + 1}`
+  )
+  const maxRow = Number((maxRowResult.rows[0] as Record<string, unknown>).m)
+  const id = `student-${maxRow + 1}`
   const refNo = `TTI-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`
 
-  db.prepare(`
-    INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, status, id_number)
-    VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?, 'Pending', ?)
-  `).run(id, `${firstName} ${lastName}`, email, studentNo || null, refNo, institution, programme, year, idNumber || null)
+  await db.execute({
+    sql: `INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, status, id_number)
+          VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?, 'Pending', ?)`,
+    args: [id, `${firstName} ${lastName}`, email, studentNo || null, refNo, institution, programme, year, idNumber || null],
+  })
 
   // Phone is not on users, but if we ever store it we'd do it here.
   void phone
@@ -69,13 +72,14 @@ export async function POST(request: Request) {
   // Identity linkage: claim any guest application submitted with this SA ID
   // so the student's dashboard picks it up immediately after signup.
   if (idNumber) {
-    db.prepare(
-      "UPDATE applications SET owner_id = ? WHERE id_number = ? AND (owner_id IS NULL OR owner_id = '')"
-    ).run(id, idNumber)
+    await db.execute({
+      sql: "UPDATE applications SET owner_id = ? WHERE id_number = ? AND (owner_id IS NULL OR owner_id = '')",
+      args: [id, idNumber],
+    })
   }
 
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as Record<string, unknown>
-  return NextResponse.json(toUserJson(user), { status: 201 })
+  const userResult = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] })
+  return NextResponse.json(toUserJson(userResult.rows[0] as Record<string, unknown>), { status: 201 })
 }
 
 function toUserJson(row: Record<string, unknown>) {
