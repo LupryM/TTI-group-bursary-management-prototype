@@ -124,11 +124,17 @@ export async function getReadyDb() {
     CREATE TABLE IF NOT EXISTS student_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       student_id TEXT,
-      doc_key TEXT,
+      doc_type TEXT,
       file_name TEXT,
-      uploaded_at TEXT
+      uploaded_at TEXT,
+      comment TEXT,
+      UNIQUE(student_id, doc_type)
     )
   `)
+
+  // Migrations for student_documents
+  try { await client.execute(`ALTER TABLE student_documents ADD COLUMN comment TEXT`) } catch {}
+  try { await client.execute(`ALTER TABLE student_documents ADD COLUMN doc_type TEXT`) } catch {}
 
   return client
 }

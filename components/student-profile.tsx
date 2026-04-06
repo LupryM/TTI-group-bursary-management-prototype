@@ -19,17 +19,32 @@ const inputCls =
 const labelCls = "block text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5"
 
 export function StudentProfile() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [saved, setSaved] = useState(false)
   const [phone, setPhone] = useState("+27 82 555 0123")
   const [altEmail, setAltEmail] = useState("")
   const [address, setAddress] = useState("12 Jacaranda Street, Pretoria, 0083")
+  const [studentNo, setStudentNo] = useState(user?.studentNo ?? "")
+  const [saving, setSaving] = useState(false)
 
   if (!user || user.role !== "student") return null
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaving(true)
+    // If student number was added and was previously empty
+    if (studentNo.trim() && (!user?.studentNo || user.studentNo.trim() === "")) {
+      try {
+        await fetch(`/api/users?id=${user!.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentNo: studentNo.trim() })
+        })
+        if (refreshUser) await refreshUser()
+      } catch {}
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+    setSaving(false)
   }
 
   const initials = user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)
@@ -180,7 +195,14 @@ export function StudentProfile() {
               </div>
               <div>
                 <label className={labelCls}>Student Number</label>
-                <input className={inputCls} value={user.studentNo ?? ""} disabled aria-label="Student number" />
+                <input
+                  className={inputCls}
+                  value={studentNo}
+                  onChange={(e) => setStudentNo(e.target.value)}
+                  disabled={!!user?.studentNo && user.studentNo.trim() !== ""}
+                  aria-label="Student number"
+                  placeholder="Enter your student number"
+                />
               </div>
             </div>
           </section>
@@ -192,14 +214,15 @@ export function StudentProfile() {
             </p>
             <button
               onClick={handleSave}
+              disabled={saving}
               className={[
                 "px-6 py-2.5 text-sm font-semibold font-sans rounded-sm transition-all",
                 saved
                   ? "bg-emerald-100 text-emerald-700 cursor-default"
-                  : "bg-[#F5A623] text-[#1A2B4A] hover:bg-[#D4891A] hover:text-white cursor-pointer",
+                  : "bg-[#F5A623] text-[#1A2B4A] hover:bg-[#D4891A] hover:text-white cursor-pointer disabled:opacity-50",
               ].join(" ")}
             >
-              {saved ? "Saved" : "Save Changes"}
+              {saving ? "Saving..." : saved ? "Saved" : "Save Changes"}
             </button>
           </div>
         </div>

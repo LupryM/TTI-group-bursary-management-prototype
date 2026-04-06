@@ -82,6 +82,40 @@ export async function POST(request: Request) {
   return NextResponse.json(toUserJson(userResult.rows[0] as Record<string, unknown>), { status: 201 })
 }
 
+export async function PATCH(request: Request) {
+  const db = await getReadyDb()
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get("id")
+  const body = await request.json()
+  const { studentNo } = body
+
+  if (!id || !studentNo) {
+    return NextResponse.json({ error: "id and studentNo are required" }, { status: 400 })
+  }
+
+  // Check if current student_no is empty
+  const current = await db.execute({ sql: "SELECT student_no FROM users WHERE id = ?", args: [id] })
+  const user = current.rows[0] as Record<string, unknown>
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
+
+  if (user.student_no && String(user.student_no).trim() !== "") {
+    return NextResponse.json({ error: "Student number is already set and cannot be changed." }, { status: 403 })
+  }
+
+  await db.execute({
+    sql: "UPDATE users SET student_no = ? WHERE id = ?",
+    args: [studentNo, id],
+  })
+
+  // Also update any application records for this owner
+  await db.execute({
+    sql: "UPDATE applications SET student_no = ? WHERE owner_id = ?",
+    args: [studentNo, id],
+  })
+
+  return NextResponse.json({ ok: true, studentNo })
+}
+
 function toUserJson(row: Record<string, unknown>) {
   return {
     id: row.id,

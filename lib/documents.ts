@@ -12,6 +12,7 @@ export const REQUIRED_DOCS: RequiredDoc[] = [
   { key: "registration", label: "Proof of registration or acceptance letter" },
   { key: "academic_record", label: "Full academic record with latest results" },
   { key: "photograph", label: "Head and shoulders photograph" },
+  { key: "other", label: "Other" },
 ]
 
 export const REQUIRED_DOC_KEYS = REQUIRED_DOCS.map((d) => d.key)

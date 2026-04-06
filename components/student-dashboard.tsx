@@ -39,10 +39,18 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 // ─── Shared document state helpers ───────────────────────────────────────────
 
+interface DocInfo {
+  fileName: string
+  uploadedAt: string
+  comment: string | null
+}
+
 interface DocState {
-  uploads: Record<string, string | null>
+  uploads: Record<string, DocInfo | null>
   selectedDocType: string
   setSelectedDocType: (v: string) => void
+  comment: string
+  setComment: (v: string) => void
   dragOver: boolean
   setDragOver: (v: boolean) => void
   uploadError: string | null
@@ -53,8 +61,9 @@ interface DocState {
 }
 
 function useDocState(userId: string): DocState {
-  const [uploads, setUploads] = useState<Record<string, string | null>>({})
+  const [uploads, setUploads] = useState<Record<string, DocInfo | null>>({})
   const [selectedDocType, setSelectedDocType] = useState("")
+  const [comment, setComment] = useState("")
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
@@ -63,9 +72,9 @@ function useDocState(userId: string): DocState {
     if (!userId) return
     fetch(`/api/documents?ownerId=${encodeURIComponent(userId)}`)
       .then((r) => r.json())
-      .then((data: { docs: Record<string, { fileName: string } | null> }) => {
-        const next: Record<string, string | null> = {}
-        for (const d of REQUIRED_DOC_DEFS) next[d.key] = data.docs?.[d.key]?.fileName ?? null
+      .then((data: { docs: Record<string, DocInfo | null> }) => {
+        const next: Record<string, DocInfo | null> = {}
+        for (const d of REQUIRED_DOC_DEFS) next[d.key] = data.docs?.[d.key] ?? null
         setUploads(next)
       })
       .catch(() => {})
@@ -92,12 +101,26 @@ function useDocState(userId: string): DocState {
       const res = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ownerId: userId, docType: selectedDocType, fileName: file.name }),
+        body: JSON.stringify({
+          ownerId: userId,
+          docType: selectedDocType,
+          fileName: file.name,
+          comment: selectedDocType === "other" ? comment : undefined
+        }),
       })
       if (!res.ok) throw new Error("Upload failed")
-      setUploads((prev) => ({ ...prev, [selectedDocType]: file.name }))
+      const data = await res.json()
+      setUploads((prev) => ({
+        ...prev,
+        [selectedDocType]: {
+            fileName: file.name,
+            uploadedAt: data.uploadedAt,
+            comment: selectedDocType === "other" ? comment : null
+        }
+      }))
       setUploadSuccess(`"${docLabel(selectedDocType)}" uploaded successfully.`)
       setSelectedDocType("")
+      setComment("")
       setTimeout(() => setUploadSuccess(null), 3000)
     } catch {
       setUploadError("Could not save upload. Please try again.")
@@ -118,7 +141,7 @@ function useDocState(userId: string): DocState {
   }
 
   return {
-    uploads, selectedDocType, setSelectedDocType, dragOver, setDragOver,
+    uploads, selectedDocType, setSelectedDocType, comment, setComment, dragOver, setDragOver,
     uploadError, uploadSuccess, handleFileUpload, handleDrop, handleFileChange,
   }
 }
@@ -140,7 +163,11 @@ function DocumentPanel({ docState }: { docState: DocState }) {
         <SectionHeader>Document Checklist</SectionHeader>
         <div className="bg-white border border-[#E5E7EB] rounded-sm">
           {REQUIRED_DOC_DEFS.map(({ key, label }, idx) => {
-            const fileName = uploads[key]
+            const docInfo = uploads[key]
+            const fileName = docInfo?.fileName
+            const uploadedAt = docInfo?.uploadedAt
+            const comment = docInfo?.comment
+            
             return (
               <div
                 key={key}
@@ -161,7 +188,17 @@ function DocumentPanel({ docState }: { docState: DocState }) {
                 <div className="flex-1 min-w-0">
                   <span className={fileName ? "text-[#1A1A2E] text-sm" : "text-[#9CA3AF] text-sm"}>{label}</span>
                   {fileName && (
-                    <p className="text-[10px] text-[#9CA3AF] font-mono truncate mt-0.5">{fileName}</p>
+                    <div className="mt-0.5 space-y-0.5">
+                      <p className="text-[10px] text-[#9CA3AF] font-mono truncate">{fileName}</p>
+                      <p className="text-[9px] text-[#9CA3AF] font-sans">
+                        Uploaded on {new Date(uploadedAt!).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      {comment && (
+                        <p className="text-[10px] text-[#F5A623] font-sans italic">
+                          " {comment} "
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
                 {!fileName && (
@@ -206,6 +243,21 @@ function DocumentPanel({ docState }: { docState: DocState }) {
             ))}
           </select>
         </div>
+
+        {selectedDocType === "other" && (
+          <div className="mb-3">
+            <label htmlFor="other-comment" className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5">
+              Add a comment
+            </label>
+            <textarea
+              id="other-comment"
+              value={docState.comment}
+              onChange={(e) => docState.setComment(e.target.value)}
+              placeholder="e.g. Proof of residence, medical certificate, etc."
+              className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm resize-none min-h-[80px]"
+            />
+          </div>
+        )}
 
         <div className="mb-1">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans mb-1.5">2. Upload file</p>
@@ -357,7 +409,30 @@ const STUDENT_STATUS_LABEL: Record<string, string> = {
   Rejected: "Rejected",
 }
 
-function ApplicantView({ app, docState }: { app: Application; docState: DocState }) {
+function ApplicantView({ app, docState, onUpdateApp }: { app: Application; docState: DocState; onUpdateApp: (app: Application) => void }) {
+  const { user, refreshUser } = useAuth()
+  const [newStudentNo, setNewStudentNo] = useState("")
+  const [updating, setUpdating] = useState(false)
+
+  const handleUpdateStudentNo = async () => {
+    if (!newStudentNo.trim() || !user) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/users?id=${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentNo: newStudentNo.trim() })
+      })
+      if (res.ok) {
+        onUpdateApp({ ...app, studentNo: newStudentNo.trim() })
+        await refreshUser()
+        setNewStudentNo("")
+      }
+    } catch {} finally {
+      setUpdating(false)
+    }
+  }
+
   const activeStep = stepIndex(app)
   const friendlyStatus = STUDENT_STATUS_LABEL[app.status] ?? app.status
   const isRejected = app.status === "Rejected"
@@ -393,6 +468,30 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
             <div className="text-right">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Submitted</p>
               <p className="text-white font-semibold font-mono text-sm">{app.submittedDate}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
+              {app.studentNo ? (
+                <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo}</p>
+              ) : (
+                <div className="flex items-center gap-2">
+                   <input
+                    type="text"
+                    value={newStudentNo}
+                    onChange={(e) => setNewStudentNo(e.target.value)}
+                    placeholder="Enter No."
+                    className="w-24 bg-white/10 border border-white/20 text-white text-[10px] px-2 py-1 rounded-sm focus:border-[#F5A623] outline-none"
+                    aria-label="Student number"
+                  />
+                  <button
+                    onClick={handleUpdateStudentNo}
+                    disabled={updating || !newStudentNo.trim()}
+                    className="bg-[#F5A623] text-[#1A2B4A] text-[10px] font-bold px-2 py-1 rounded-sm hover:bg-[#D4891A] disabled:opacity-50"
+                  >
+                    {updating ? "..." : "Save"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -492,21 +591,41 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
   )
 }
 
-// ─── Bursary Holder View (Approved) ──────────────────────────────────────────
-
 interface BursaryHolderViewProps {
   app: Application
   docState: DocState
   workshops: Workshop[]
   workshopsLoading: boolean
   studentRecord: { disbursed: number; status: string } | null
+  onUpdateApp: (app: Application) => void
 }
 
-function BursaryHolderView({ app, docState, workshops, workshopsLoading, studentRecord }: BursaryHolderViewProps) {
-  const { user } = useAuth()
+function BursaryHolderView({ app, docState, workshops, workshopsLoading, studentRecord, onUpdateApp }: BursaryHolderViewProps) {
+  const { user, refreshUser } = useAuth()
+  const [newStudentNo, setNewStudentNo] = useState("")
+  const [updating, setUpdating] = useState(false)
   const { uploads } = docState
   const completedDocs = Object.values(uploads).filter(Boolean).length
   const totalDocs = REQUIRED_DOC_DEFS.length
+
+  const handleUpdateStudentNo = async () => {
+    if (!newStudentNo.trim() || !user) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/users?id=${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentNo: newStudentNo.trim() })
+      })
+      if (res.ok) {
+        onUpdateApp({ ...app, studentNo: newStudentNo.trim() })
+        await refreshUser()
+        setNewStudentNo("")
+      }
+    } catch {} finally {
+      setUpdating(false)
+    }
+  }
 
   const disbursed = studentRecord?.disbursed ?? 0
   const displayStatus = app.status === "Approved"
@@ -550,7 +669,27 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading, student
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
-              <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo || "—"}</p>
+              {app.studentNo ? (
+                <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo}</p>
+              ) : (
+                <div className="flex items-center gap-2">
+                   <input
+                    type="text"
+                    value={newStudentNo}
+                    onChange={(e) => setNewStudentNo(e.target.value)}
+                    placeholder="Enter No."
+                    className="w-24 bg-white/10 border border-white/20 text-white text-[10px] px-2 py-1 rounded-sm focus:border-[#F5A623] outline-none"
+                    aria-label="Student number"
+                  />
+                  <button
+                    onClick={handleUpdateStudentNo}
+                    disabled={updating || !newStudentNo.trim()}
+                    className="bg-[#F5A623] text-[#1A2B4A] text-[10px] font-bold px-2 py-1 rounded-sm hover:bg-[#D4891A] disabled:opacity-50"
+                  >
+                    {updating ? "..." : "Save"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -781,6 +920,11 @@ export function StudentDashboard() {
 
   const app = selectedApp!
 
+  const handleUpdateApp = (updated: Application) => {
+    setSelectedApp(updated)
+    setApplications(prev => prev.map(a => a.id === updated.id ? updated : a))
+  }
+
   // Wrap the detail view with the selector panel (shown only if multiple applications)
   const withSelector = (children: ReactNode) => (
     <>
@@ -806,10 +950,11 @@ export function StudentDashboard() {
         workshops={workshops}
         workshopsLoading={workshopsLoading}
         studentRecord={studentRecord}
+        onUpdateApp={handleUpdateApp}
       />
     )
   }
 
   // Submitted / Under Review / Rejected → applicant status tracker
-  return withSelector(<ApplicantView app={app} docState={docState} />)
+  return withSelector(<ApplicantView app={app} docState={docState} onUpdateApp={handleUpdateApp} />)
 }

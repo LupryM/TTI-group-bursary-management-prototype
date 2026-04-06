@@ -35,6 +35,7 @@ interface AuthContextValue {
   login: (userId: string) => void
   logout: () => void
   registerAndLogin: (newUser: MockUser) => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -44,6 +45,7 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   logout: () => {},
   registerAndLogin: () => {},
+  refreshUser: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -88,8 +90,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("tti_user_id", newUser.id)
   }
 
+  const refreshUser = async () => {
+    if (!user) return
+    try {
+      const res = await fetch(`/api/users?id=${user.id}`)
+      if (!res.ok) return
+      const updatedUser = await res.json()
+      setUser(updatedUser)
+      // Update in users list too
+      setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)))
+    } catch {}
+  }
+
   return (
-    <AuthContext.Provider value={{ user, users, loading, login, logout, registerAndLogin }}>
+    <AuthContext.Provider value={{ user, users, loading, login, logout, registerAndLogin, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )
