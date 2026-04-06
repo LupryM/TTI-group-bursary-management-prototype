@@ -43,7 +43,8 @@ function initSchema(db: Database.Database) {
       company TEXT,
       bbbee_level INTEGER,
       total_budget REAL,
-      department TEXT
+      department TEXT,
+      id_number TEXT
     );
 
     CREATE TABLE IF NOT EXISTS applications (
@@ -131,6 +132,15 @@ function initSchema(db: Database.Database) {
       UNIQUE(student_id, doc_type)
     );
   `)
+
+  // ── Migrations for databases created before this schema version ──────────────
+  // ALTER TABLE ignores "duplicate column" errors — safe to run every startup.
+  const migrations = [
+    "ALTER TABLE users ADD COLUMN id_number TEXT",
+  ]
+  for (const sql of migrations) {
+    try { db.exec(sql) } catch { /* column already exists */ }
+  }
 }
 
 function seedIfEmpty(db: Database.Database) {

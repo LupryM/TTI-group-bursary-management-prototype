@@ -4,9 +4,16 @@ import { REQUIRED_DOC_COUNT } from "@/lib/documents"
 
 export const dynamic = "force-dynamic"
 
-export function GET() {
+export function GET(request: Request) {
   const db = getDb()
-  const rows = db.prepare("SELECT * FROM applications ORDER BY rowid").all() as Record<string, unknown>[]
+  const { searchParams } = new URL(request.url)
+  const ownerId = searchParams.get("ownerId")
+
+  // When ownerId is provided, return only that student's application(s).
+  const rows = ownerId
+    ? (db.prepare("SELECT * FROM applications WHERE owner_id = ? ORDER BY rowid").all(ownerId) as Record<string, unknown>[])
+    : (db.prepare("SELECT * FROM applications ORDER BY rowid").all() as Record<string, unknown>[])
+
   // Compute docsComplete dynamically from student_documents joined by owner_id,
   // so admin always sees real upload state rather than a stale boolean.
   const countStmt = db.prepare(
@@ -14,9 +21,9 @@ export function GET() {
   )
   return NextResponse.json(
     rows.map((row) => {
-      const ownerId = (row.owner_id as string | null) ?? ""
-      const uploadedCount = ownerId
-        ? (countStmt.get(ownerId) as { c: number }).c
+      const rowOwnerId = (row.owner_id as string | null) ?? ""
+      const uploadedCount = rowOwnerId
+        ? (countStmt.get(rowOwnerId) as { c: number }).c
         : (row.docs_complete === 1 ? REQUIRED_DOC_COUNT : 0)
       return toAppJson(row, uploadedCount)
     })
@@ -127,7 +134,83 @@ export async function PATCH(request: Request) {
   const updated = db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as Record<string, unknown>
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
+  // ── Side-effects when transitioning TO Approved ───────────────────────────
+  if (status === "Approved" && current.status !== "Approved") {
+    provisionApprovedStudent(db, current)
+  }
+
   return NextResponse.json(toAppJson(updated))
+}
+
+const DEFAULT_MODULES = [
+  "Orientation",
+  "Financial Literacy",
+  "CV Writing",
+  "Workplace Readiness",
+  "Entrepreneurship",
+]
+
+function getUpcomingDate(daysFromNow: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + daysFromNow)
+  return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
+}
+
+function provisionApprovedStudent(db: ReturnType<typeof getDb>, app: Record<string, unknown>) {
+  const funderName = app.funder as string
+  const funder = db.prepare("SELECT id FROM funders WHERE name = ?").get(funderName) as { id: string } | undefined
+  if (!funder) return
+
+  // Idempotent: skip if a funder_students record already exists for this student + funder
+  const existing = db
+    .prepare("SELECT id FROM funder_students WHERE student_no = ? AND funder_id = ?")
+    .get(app.student_no, funder.id)
+  if (existing) return
+
+  const fsId = `fs-${Date.now()}`
+  db.prepare(`
+    INSERT INTO funder_students (id, name, student_no, institution, programme, year, amount, disbursed, status, academic_avg, funder_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'Approved', ?, ?)
+  `).run(
+    fsId,
+    app.student_name,
+    app.student_no,
+    app.institution,
+    app.programme,
+    app.year,
+    app.amount ?? 0,
+    app.academic_avg ?? 0,
+    funder.id,
+  )
+
+  const insertModule = db.prepare(
+    "INSERT INTO student_modules (funder_student_id, name, complete) VALUES (?, ?, 0)"
+  )
+  for (const name of DEFAULT_MODULES) {
+    insertModule.run(fsId, name)
+  }
+
+  // Generate upcoming workshops if the student has none yet
+  const ownerId = app.owner_id as string | null
+  if (ownerId) {
+    const wsCount = (
+      db.prepare("SELECT COUNT(*) as c FROM workshops WHERE student_id = ?").get(ownerId) as { c: number }
+    ).c
+    if (wsCount === 0) {
+      const defaultWorkshops = [
+        { title: "Orientation & Programme Overview", days: 7, facilitator: "T. Nkosi", duration: "2 hrs" },
+        { title: "Financial Literacy & Budgeting", days: 21, facilitator: "T. Nkosi", duration: "3 hrs" },
+        { title: "CV Writing & Professional Branding", days: 35, facilitator: "M. van Wyk", duration: "2 hrs" },
+        { title: "Workplace Readiness & Ethics", days: 49, facilitator: "S. Dlamini", duration: "4 hrs" },
+      ]
+      const insertWS = db.prepare(
+        "INSERT INTO workshops (title, date, status, facilitator, duration, student_id) VALUES (?, ?, 'Upcoming', ?, ?, ?)"
+      )
+      for (const ws of defaultWorkshops) {
+        insertWS.run(ws.title, getUpcomingDate(ws.days), ws.facilitator, ws.duration, ownerId)
+      }
+    }
+  }
 }
 
 function toAppJson(row: Record<string, unknown>, uploadedCount?: number) {

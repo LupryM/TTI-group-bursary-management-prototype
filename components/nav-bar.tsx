@@ -1,10 +1,12 @@
 "use client"
 
+import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth, Role } from "@/lib/auth-context"
 
-// ─── Per-role nav definitions ─────────────────────────────────────────────────
+// ─── View type exports (consumed by AdminPortal and FunderPortal) ─────────────
 
 export type StudentView = "dashboard" | "apply" | "profile"
 export type FunderView = "overview" | "students" | "reports"
@@ -12,28 +14,30 @@ export type AdminView = "applications" | "tracker" | "funders"
 
 export type AnyView = StudentView | FunderView | AdminView
 
+// ─── Per-role nav definitions ─────────────────────────────────────────────────
+
 interface NavItem {
   label: string
-  view: AnyView
+  href: string
   sublabel: string
 }
 
 const STUDENT_NAV: NavItem[] = [
-  { label: "My Bursary", view: "dashboard", sublabel: "Dashboard" },
-  { label: "Apply", view: "apply", sublabel: "New Application" },
-  { label: "Profile", view: "profile", sublabel: "Account" },
+  { label: "My Bursary", href: "/portal/student/dashboard", sublabel: "Dashboard" },
+  { label: "Apply", href: "/apply", sublabel: "New Application" },
+  { label: "Profile", href: "/portal/student/profile", sublabel: "Account" },
 ]
 
 const FUNDER_NAV: NavItem[] = [
-  { label: "Overview", view: "overview", sublabel: "Summary" },
-  { label: "My Students", view: "students", sublabel: "Cohort" },
-  { label: "Reports", view: "reports", sublabel: "Compliance" },
+  { label: "Overview", href: "/portal/funder/overview", sublabel: "Summary" },
+  { label: "My Students", href: "/portal/funder/students", sublabel: "Cohort" },
+  { label: "Reports", href: "/portal/funder/reports", sublabel: "Compliance" },
 ]
 
 const ADMIN_NAV: NavItem[] = [
-  { label: "Applications", view: "applications", sublabel: "Approvals Queue" },
-  { label: "Skills Tracker", view: "tracker", sublabel: "Progress" },
-  { label: "Funders", view: "funders", sublabel: "Manage" },
+  { label: "Applications", href: "/portal/admin/applications", sublabel: "Approvals Queue" },
+  { label: "Skills Tracker", href: "/portal/admin/tracker", sublabel: "Progress" },
+  { label: "Funders", href: "/portal/admin/funders", sublabel: "Manage" },
 ]
 
 function navForRole(role: Role): NavItem[] {
@@ -57,18 +61,20 @@ const ROLE_COLORS: Record<Role, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface NavBarProps {
-  activeView: AnyView
-  onViewChange: (view: AnyView) => void
-}
-
-export function NavBar({ activeView, onViewChange }: NavBarProps) {
+export function NavBar() {
   const { user, logout } = useAuth()
+  const pathname = usePathname()
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
   if (!user) return null
 
   const navItems = navForRole(user.role)
+
+  const handleLogout = () => {
+    logout()
+    router.push("/login")
+  }
 
   return (
     <header className="w-full bg-white border-b border-[#E5E7EB] sticky top-0 z-40">
@@ -87,9 +93,9 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
       {/* Main nav */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <button
-            onClick={() => onViewChange(navItems[0].view)}
+          {/* Logo — links to first nav item for this role */}
+          <Link
+            href={navItems[0].href}
             className="flex-shrink-0 flex items-center"
             aria-label="TTI Bursary Management home"
           >
@@ -102,7 +108,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
               className="object-contain"
               style={{ height: "auto" }}
             />
-          </button>
+          </Link>
 
           {/* Nav links — desktop */}
           <nav
@@ -111,13 +117,13 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
             aria-label="Main navigation"
           >
             {navItems.map((item) => {
-              const isActive = activeView === item.view
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
               return (
-                <button
-                  key={item.view}
-                  onClick={() => onViewChange(item.view)}
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className={[
-                    "relative flex flex-col items-center justify-center px-5 h-full font-sans text-sm transition-colors cursor-pointer",
+                    "relative flex flex-col items-center justify-center px-5 h-full font-sans text-sm transition-colors",
                     isActive
                       ? "text-[#F5A623]"
                       : "text-[#4B5563] hover:text-[#1A2B4A]",
@@ -134,7 +140,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
                       aria-hidden="true"
                     />
                   )}
-                </button>
+                </Link>
               )
             })}
           </nav>
@@ -159,7 +165,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
 
             {/* Logout */}
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="flex items-center gap-1.5 text-xs text-[#6B7280] hover:text-[#1A2B4A] font-sans transition-colors border border-[#E5E7EB] px-3 py-2 rounded-sm hover:bg-[#F5F6F8]"
               aria-label="Sign out"
             >
@@ -214,11 +220,12 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
             </div>
           </div>
           {navItems.map((item) => {
-            const isActive = activeView === item.view
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
             return (
-              <button
-                key={item.view}
-                onClick={() => { onViewChange(item.view); setMenuOpen(false) }}
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
                 className={[
                   "w-full flex items-center gap-3 px-6 py-3.5 text-sm font-sans border-b border-[#E5E7EB] last:border-0 transition-colors",
                   isActive
@@ -231,7 +238,7 @@ export function NavBar({ activeView, onViewChange }: NavBarProps) {
                 )}
                 <span>{item.label}</span>
                 <span className="text-[10px] uppercase tracking-widest text-[#9CA3AF] ml-auto">{item.sublabel}</span>
-              </button>
+              </Link>
             )
           })}
         </nav>

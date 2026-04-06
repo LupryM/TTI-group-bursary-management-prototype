@@ -32,6 +32,7 @@ export async function POST(request: Request) {
   const programme = String(body.programme || "").trim()
   const year = String(body.year || "").trim()
   const studentNo = String(body.studentNo || "").trim()
+  const idNumber = String(body.idNumber || "").trim()
 
   if (!firstName || !lastName) {
     return NextResponse.json({ error: "First and last name are required." }, { status: 400 })
@@ -58,13 +59,20 @@ export async function POST(request: Request) {
   const refNo = `TTI-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`
 
   db.prepare(`
-    INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, status)
-    VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?, 'Pending')
-  `).run(id, `${firstName} ${lastName}`, email, studentNo || null, refNo, institution, programme, year)
+    INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, status, id_number)
+    VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?, 'Pending', ?)
+  `).run(id, `${firstName} ${lastName}`, email, studentNo || null, refNo, institution, programme, year, idNumber || null)
 
-  // Phone is not on users, but if we ever store it we'd do it here. For now
-  // the signup form captures it so the student can reuse it when applying.
+  // Phone is not on users, but if we ever store it we'd do it here.
   void phone
+
+  // Identity linkage: claim any guest application submitted with this SA ID
+  // so the student's dashboard picks it up immediately after signup.
+  if (idNumber) {
+    db.prepare(
+      "UPDATE applications SET owner_id = ? WHERE id_number = ? AND (owner_id IS NULL OR owner_id = '')"
+    ).run(id, idNumber)
+  }
 
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as Record<string, unknown>
   return NextResponse.json(toUserJson(user), { status: 201 })
@@ -85,6 +93,7 @@ function toUserJson(row: Record<string, unknown>) {
     funderName: row.funder_name ?? undefined,
     bursaryAmount: row.bursary_amount ?? undefined,
     status: row.status ?? undefined,
+    idNumber: row.id_number ?? undefined,
     company: row.company ?? undefined,
     bbbeeLevel: row.bbbee_level ?? undefined,
     totalBudget: row.total_budget ?? undefined,
