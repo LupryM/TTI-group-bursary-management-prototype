@@ -102,8 +102,13 @@ export async function PATCH(request: Request) {
   const body = await request.json()
   const { id, status } = body
 
-  if (!id || !status) {
-    return NextResponse.json({ error: "id and status are required" }, { status: 400 })
+  if (!id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 })
+  }
+
+  // status is only required for status-change requests, not funder/amount updates
+  if (!status && body.funder === undefined && body.amount === undefined) {
+    return NextResponse.json({ error: "Provide status, funder, or amount" }, { status: 400 })
   }
 
   const changedAt = new Date().toISOString()
@@ -169,12 +174,13 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
   const funderName = app.funder as string
   const funderResult = await db.execute({ sql: "SELECT id FROM funders WHERE name = ?", args: [funderName] })
   const funder = funderResult.rows[0] as unknown as { id: string } | undefined
-  if (!funder) return
+  // Use the funder's id if found, otherwise null (funder not yet assigned or unrecognised)
+  const funderId: string | null = funder?.id ?? null
 
-  // Idempotent: skip if a funder_students record already exists for this student + funder
+  // Idempotent: skip if a funder_students record already exists for this student
   const existingResult = await db.execute({
-    sql: "SELECT id FROM funder_students WHERE student_no = ? AND funder_id = ?",
-    args: [app.student_no as string, funder.id],
+    sql: "SELECT id FROM funder_students WHERE student_no = ?",
+    args: [app.student_no as string],
   })
   if (existingResult.rows.length > 0) return
 
@@ -191,7 +197,7 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
       app.year as string,
       (app.amount ?? 0) as number,
       (app.academic_avg ?? 0) as number,
-      funder.id,
+      funderId,
     ],
   })
 

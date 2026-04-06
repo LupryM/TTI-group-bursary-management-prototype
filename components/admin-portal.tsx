@@ -27,19 +27,36 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 type AppStatus = Application["status"]
 
+// Map DB statuses to admin-friendly display labels
+const ADMIN_STATUS_LABELS: Record<string, string> = {
+  Submitted: "Pending Review",
+  "Under Review": "Under Review",
+  Approved: "Approved",
+  Rejected: "Rejected",
+}
+
+const adminStatusLabel = (s: string) => ADMIN_STATUS_LABELS[s] ?? s
+
 const statusBadge = (s: string) => {
   const base = "inline-flex items-center px-2.5 py-0.5 text-xs font-semibold tracking-wide font-sans rounded-sm whitespace-nowrap"
-  if (s === "Approved") return `${base} bg-emerald-100 text-emerald-700`
-  if (s === "Under Review") return `${base} bg-amber-100 text-amber-700`
-  if (s === "Pending") return `${base} bg-[#F5F6F8] text-[#6B7280] border border-[#E5E7EB]`
-  if (s === "Rejected") return `${base} bg-red-100 text-red-600`
+  const label = adminStatusLabel(s)
+  if (label === "Approved") return `${base} bg-emerald-100 text-emerald-700`
+  if (label === "Under Review") return `${base} bg-amber-100 text-amber-700`
+  if (label === "Pending Review") return `${base} bg-blue-50 text-blue-700 border border-blue-200`
+  if (label === "Rejected") return `${base} bg-red-100 text-red-600`
   return `${base} bg-[#F5F6F8] text-[#6B7280]`
 }
 
 // ── Applications queue ────────────────────────────────────────────────────────
 
+interface FunderOption {
+  id: string
+  name: string
+}
+
 function AdminApplications() {
   const [apps, setApps] = useState<Application[]>([])
+  const [funders, setFunders] = useState<FunderOption[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<AppStatus | "All">("All")
@@ -49,15 +66,17 @@ function AdminApplications() {
   const [assignFunder, setAssignFunder] = useState("")
   const [assignAmount, setAssignAmount] = useState("")
 
-  const FUNDERS = ["Anglo American plc", "Sasol Bursaries", "Shell South Africa", "Nedbank Foundation"]
-
   useEffect(() => {
-    fetch("/api/applications")
-      .then((r) => r.json())
-      .then((data: Application[]) => {
-        setApps(data)
+    Promise.all([
+      fetch("/api/applications").then((r) => r.json()),
+      fetch("/api/funders").then((r) => r.json()),
+    ])
+      .then(([appData, funderData]) => {
+        setApps(appData)
+        setFunders(funderData)
         setLoadingData(false)
       })
+      .catch(() => setLoadingData(false))
   }, [])
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
@@ -124,7 +143,16 @@ function AdminApplications() {
     return matchSearch && matchStatus
   })
 
-  const counts = {
+  // Tab definitions — dbStatus is used for filtering, label is what admin sees
+  const STATUS_TABS: { dbStatus: AppStatus | "All"; label: string }[] = [
+    { dbStatus: "All", label: "All" },
+    { dbStatus: "Submitted", label: "Pending Review" },
+    { dbStatus: "Under Review", label: "Under Review" },
+    { dbStatus: "Approved", label: "Approved" },
+    { dbStatus: "Rejected", label: "Rejected" },
+  ]
+
+  const counts: Record<string, number> = {
     All: apps.length,
     Submitted: apps.filter((a) => a.status === "Submitted").length,
     "Under Review": apps.filter((a) => a.status === "Under Review").length,
@@ -164,23 +192,23 @@ function AdminApplications() {
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {(["All", "Submitted", "Under Review", "Approved", "Rejected"] as const).map((s) => (
+        {STATUS_TABS.map(({ dbStatus, label }) => (
           <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
+            key={dbStatus}
+            onClick={() => setFilterStatus(dbStatus)}
             className={[
               "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold font-sans rounded-sm border transition-colors",
-              filterStatus === s
+              filterStatus === dbStatus
                 ? "bg-[#1A2B4A] text-white border-[#1A2B4A]"
                 : "bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F5F6F8]",
             ].join(" ")}
           >
-            {s}
+            {label}
             <span className={[
               "text-[10px] px-1.5 py-0.5 rounded-sm font-mono",
-              filterStatus === s ? "bg-white/20 text-white" : "bg-[#F5F6F8] text-[#9CA3AF]",
+              filterStatus === dbStatus ? "bg-white/20 text-white" : "bg-[#F5F6F8] text-[#9CA3AF]",
             ].join(" ")}>
-              {counts[s]}
+              {counts[dbStatus] ?? 0}
             </span>
           </button>
         ))}
@@ -246,7 +274,7 @@ function AdminApplications() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={statusBadge(app.status)}>{app.status}</span>
+                    <span className={statusBadge(app.status)}>{adminStatusLabel(app.status)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs text-[#F5A623] font-sans hover:underline">
@@ -330,7 +358,11 @@ function AdminApplications() {
                       className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
                     >
                       <option value="">{selected.funder && selected.funder !== "Unassigned" ? selected.funder : "Select funder…"}</option>
-                      {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
+                      {funders.length > 0 ? (
+                        funders.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)
+                      ) : (
+                        <option disabled>No funders available</option>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -355,7 +387,7 @@ function AdminApplications() {
 
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Status:</span>
-                <span className={statusBadge(selected.status)}>{selected.status}</span>
+                <span className={statusBadge(selected.status)}>{adminStatusLabel(selected.status)}</span>
               </div>
 
               {selected.status !== "Approved" && selected.status !== "Rejected" && (
@@ -372,7 +404,7 @@ function AdminApplications() {
                     onClick={() => updateStatus(selected.id, "Under Review")}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-amber-500 text-white hover:bg-amber-600 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    Review
+                    Flag for Review
                   </button>
                   <button
                     disabled={actionLoading}
@@ -402,6 +434,8 @@ function AdminSkillsTracker() {
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
   const [filterInstitution, setFilterInstitution] = useState("")
   const [filterCompletion, setFilterCompletion] = useState("")
+  // Which student card is expanded (accordion — one at a time)
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/students")
@@ -409,6 +443,8 @@ function AdminSkillsTracker() {
       .then((data: FunderStudent[]) => {
         setStudents(data)
         setLoadingData(false)
+        // Auto-expand the first student for discoverability
+        if (data.length > 0) setExpandedStudentId(data[0].id)
       })
   }, [])
 
@@ -458,7 +494,6 @@ function AdminSkillsTracker() {
       (filterCompletion === "0" && pct === 0) ||
       (filterCompletion === "incomplete" && pct > 0 && pct < 100) ||
       (filterCompletion === "100" && pct === 100)
-    
     return matchSearch && matchInstitution && matchCompletion
   })
 
@@ -478,7 +513,7 @@ function AdminSkillsTracker() {
       <div className="mb-6">
         <p className="text-[10px] tracking-widest uppercase text-[#9CA3AF] mb-1">Admin Portal</p>
         <h1 className="text-2xl font-serif font-semibold text-[#1A2B4A]">Skills Development Tracker</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Monitor module completion and manage financial disbursements for all funded students.</p>
+        <p className="text-sm text-[#6B7280] mt-1">Click a student to view and manage their module progress.</p>
       </div>
 
       {/* KPIs */}
@@ -545,85 +580,122 @@ function AdminSkillsTracker() {
       ) : filtered.length === 0 ? (
         <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">No students found.</div>
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
           {filtered.map((s) => {
             const pct = progressPct(s.modules)
             const completedCount = s.modules.filter((m) => m.complete).length
+            const isExpanded = expandedStudentId === s.id
+
             return (
               <div key={s.id} className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
-                {/* Student header */}
-                <div className="px-5 py-4 border-b border-[#E5E7EB] bg-[#F5F6F8] flex flex-col sm:flex-row sm:items-start gap-3">
+                {/* ── Clickable student row ── */}
+                <button
+                  type="button"
+                  onClick={() => setExpandedStudentId(isExpanded ? null : s.id)}
+                  className="w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-[#F5A623]/4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A623]"
+                  aria-expanded={isExpanded}
+                  aria-controls={`modules-${s.id}`}
+                >
+                  {/* Left: name + meta */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
                       <p className="font-semibold text-[#1A1A2E] text-sm font-sans">{s.name}</p>
                       <span className="text-[10px] font-mono text-[#9CA3AF]">{s.studentNo}</span>
-                      
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#1A2B4A]/5 border border-[#1A2B4A]/10 text-xs font-mono font-semibold text-[#1A2B4A]">
                         Award: {formatZAR(s.amount)}
                       </span>
                     </div>
-                    <p className="text-xs text-[#6B7280] mt-0.5">{s.institution} &mdash; {s.programme}</p>
+                    <p className="text-xs text-[#6B7280]">{s.institution} &mdash; {s.programme}</p>
                   </div>
-                  <div className="flex-shrink-0 sm:text-right">
-                    <div className="flex sm:justify-end items-center gap-2 mb-1.5">
-                      <span className="text-sm font-semibold text-[#1A1A2E] font-sans">{pct}%</span>
-                      <span className="text-xs text-[#9CA3AF]">({completedCount}/{s.modules.length} modules)</span>
-                      {pct === 100 && (
-                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-sm">All Complete</span>
-                      )}
-                    </div>
-                    <div className="h-2 bg-[#E5E7EB] rounded-full overflow-hidden w-full sm:w-40">
-                      <div
-                        className="h-full bg-[#F5A623] rounded-full transition-all"
-                        style={{ width: `${pct}%` }}
-                        role="progressbar"
-                        aria-valuenow={pct}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                {/* Module rows */}
-                <div className="divide-y divide-[#E5E7EB]">
-                  {s.modules.map((m) => {
-                    const key = `${s.id}:${m.name}`
-                    const isToggling = togglingKey === key
-                    return (
-                      <div key={m.name} className="px-5 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
-                        {/* Status dot */}
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${m.complete ? "bg-emerald-400" : "bg-[#D1D5DB]"}`}
-                          aria-hidden="true"
-                        />
-                        {/* Module name */}
-                        <span className="flex-1 text-sm text-[#1A1A2E] font-sans min-w-0">{m.name}</span>
-                        {/* Status dropdown */}
-                        <select
-                          value={m.complete ? "complete" : "incomplete"}
-                          onChange={(e) => {
-                            const newComplete = e.target.value === "complete"
-                            if (newComplete !== m.complete) {
-                              toggleModule(s.id, m.name, m.complete)
-                            }
-                          }}
-                          disabled={isToggling}
-                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-semibold font-sans rounded-sm border transition-colors appearance-none cursor-pointer disabled:opacity-50 bg-white"
-                          style={{
-                            borderColor: m.complete ? "#86efac" : "#fed7aa",
-                            backgroundColor: m.complete ? "#f0fdf4" : "#fffbeb",
-                            color: m.complete ? "#166534" : "#b45309",
-                          }}
-                          aria-label={`Mark ${m.name} as`}
-                        >
-                          <option value="incomplete">Incomplete</option>
-                          <option value="complete">Complete</option>
-                        </select>
+                  {/* Right: progress + chevron */}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 justify-end mb-1">
+                        <span className="text-sm font-semibold text-[#1A1A2E] font-sans">{pct}%</span>
+                        <span className="text-xs text-[#9CA3AF]">({completedCount}/{s.modules.length})</span>
+                        {pct === 100 && (
+                          <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-sm">All Complete</span>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
+                      <div className="h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden w-32 sm:w-40">
+                        <div
+                          className="h-full bg-[#F5A623] rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                          role="progressbar"
+                          aria-valuenow={pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                        />
+                      </div>
+                    </div>
+                    {/* Chevron */}
+                    <svg
+                      width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+                      className={`flex-shrink-0 text-[#9CA3AF] transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                    >
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* ── Expanded modules panel ── */}
+                {isExpanded && (
+                  <div id={`modules-${s.id}`} className="border-t border-[#E5E7EB] bg-[#FAFAFA]">
+                    <div className="px-5 py-2.5 border-b border-[#E5E7EB]">
+                      <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-semibold">Modules — click a row to toggle completion</p>
+                    </div>
+                    <div className="divide-y divide-[#E5E7EB]">
+                      {s.modules.map((m) => {
+                        const key = `${s.id}:${m.name}`
+                        const isToggling = togglingKey === key
+                        return (
+                          <button
+                            key={m.name}
+                            type="button"
+                            onClick={() => !isToggling && toggleModule(s.id, m.name, m.complete)}
+                            disabled={isToggling}
+                            className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white transition-colors disabled:opacity-60 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#F5A623]"
+                            aria-pressed={m.complete}
+                            aria-label={`${m.name} — ${m.complete ? "complete, click to mark incomplete" : "incomplete, click to mark complete"}`}
+                          >
+                            {/* Checkbox-style indicator */}
+                            <span
+                              className={[
+                                "w-4 h-4 flex-shrink-0 rounded-sm border flex items-center justify-center transition-colors",
+                                m.complete
+                                  ? "bg-emerald-500 border-emerald-500"
+                                  : "bg-white border-[#D1D5DB]",
+                              ].join(" ")}
+                              aria-hidden="true"
+                            >
+                              {m.complete && (
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                  <path d="M2 5.5L4 7.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </span>
+                            {/* Module name */}
+                            <span className={`flex-1 text-sm font-sans ${m.complete ? "text-[#1A1A2E]" : "text-[#6B7280]"}`}>
+                              {m.name}
+                            </span>
+                            {/* Status pill */}
+                            <span
+                              className={[
+                                "text-[10px] font-semibold px-2 py-0.5 rounded-sm flex-shrink-0",
+                                m.complete
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-[#FEF3C7] text-amber-700",
+                              ].join(" ")}
+                            >
+                              {isToggling ? "Saving…" : m.complete ? "Complete" : "Incomplete"}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
