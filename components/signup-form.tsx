@@ -36,6 +36,7 @@ interface SignupFormState {
   programme: string
   year: string
   studentNo: string
+  idNumber: string
   consent: boolean
 }
 
@@ -48,13 +49,14 @@ const EMPTY: SignupFormState = {
   programme: "",
   year: "",
   studentNo: "",
+  idNumber: "",
   consent: false,
 }
 
 export function SignupForm({ onCancel }: { onCancel: () => void }) {
   const { registerAndLogin } = useAuth()
   const [form, setForm] = useState<SignupFormState>(EMPTY)
-  const [errors, setErrors] = useState<Partial<Record<keyof SignupFormState | "_form", string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof SignupFormState | "_form" | "idNumber", string>>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const set = (field: keyof SignupFormState) => (
@@ -74,6 +76,8 @@ export function SignupForm({ onCancel }: { onCancel: () => void }) {
     if (!form.institution) errs.institution = "Select an institution"
     if (!form.programme.trim()) errs.programme = "Required"
     if (!form.year) errs.year = "Select year"
+    if (form.idNumber && !/^\d{13}$/.test(form.idNumber.replace(/\s/g, "")))
+      errs.idNumber = "SA ID must be exactly 13 digits."
     if (!form.consent) errs._form = "You must accept the terms to create an account."
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -163,6 +167,22 @@ export function SignupForm({ onCancel }: { onCancel: () => void }) {
       <div>
         <label htmlFor="su-sno" className={labelCls}>Student Number <span className="text-[#9CA3AF] normal-case tracking-normal">(optional)</span></label>
         <input id="su-sno" className={inputCls} value={form.studentNo} onChange={set("studentNo")} placeholder="If already registered" />
+      </div>
+
+      <div>
+        <label htmlFor="su-idno" className={labelCls}>
+          SA ID Number <span className="text-[#9CA3AF] normal-case tracking-normal">(optional — links an existing application)</span>
+        </label>
+        <input
+          id="su-idno"
+          className={errors.idNumber ? errCls : inputCls}
+          value={form.idNumber}
+          onChange={set("idNumber")}
+          placeholder="13-digit South African ID number"
+          maxLength={13}
+          inputMode="numeric"
+        />
+        {errors.idNumber && <p className="text-[10px] text-red-500 mt-1">{errors.idNumber}</p>}
       </div>
 
       <label className="flex items-start gap-2 cursor-pointer mt-1">

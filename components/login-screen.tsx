@@ -227,9 +227,21 @@ export function LoginScreen() {
           </div>
 
           {/* Footer note */}
-          <p className="text-center text-[10px] text-[#9CA3AF] mt-6 font-sans">
-            &copy; {new Date().getFullYear()} TTI Group &mdash; POPIA Compliant &middot; B-BBEE Level 1
-          </p>
+          <div className="text-center mt-6 space-y-2">
+            <p className="text-[10px] text-[#9CA3AF] font-sans">
+              &copy; {new Date().getFullYear()} TTI Group &mdash; POPIA Compliant &middot; B-BBEE Level 1
+            </p>
+            <p className="text-xs font-sans text-[#9CA3AF]">
+              New student?{" "}
+              <button
+                onClick={() => { setMode("signup"); setActiveRole("student") }}
+                className="text-[#F5A623] font-semibold hover:underline cursor-pointer"
+              >
+                Create an account
+              </button>
+              {" "}to apply for a bursary.
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -244,7 +244,8 @@ export function ApplicationForm() {
   if (formState === "success") {
     return (
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12 font-sans">
-        <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden shadow-sm">
+        {/* Confirmation card */}
+        <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden shadow-sm mb-6">
           <div className="flex items-stretch">
             <div className="w-1.5 bg-[#F5A623] flex-shrink-0" aria-hidden="true" />
             <div className="p-8">
@@ -275,12 +276,23 @@ export function ApplicationForm() {
               </div>
               <button
                 onClick={resetForm}
-                className="px-6 py-2.5 text-sm font-semibold font-sans bg-[#F5A623] text-[#1A2B4A] hover:bg-[#D4891A] hover:text-white rounded-sm transition-colors cursor-pointer"
+                className="text-xs font-semibold font-sans text-[#6B7280] hover:text-[#1A2B4A] underline underline-offset-2 transition-colors cursor-pointer"
               >
-                Submit Another Application
+                Submit another application
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Link back to dashboard */}
+        <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm px-6 py-4 flex items-center justify-between">
+          <p className="text-sm text-[#6B7280] font-sans">Track your application status in your student portal.</p>
+          <a
+            href="/portal/student/dashboard"
+            className="text-sm font-semibold font-sans text-[#F5A623] hover:underline whitespace-nowrap ml-4"
+          >
+            Go to dashboard →
+          </a>
         </div>
       </main>
     )

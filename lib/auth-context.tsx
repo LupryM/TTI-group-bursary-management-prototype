@@ -19,6 +19,7 @@ export interface MockUser {
   funderName?: string
   bursaryAmount?: number
   status?: "Approved" | "Pending" | "Under Review" | "Rejected"
+  idNumber?: string   // SA ID used to claim a guest application on signup
   // funder-specific
   company?: string
   bbbeeLevel?: number
