@@ -24,7 +24,7 @@ interface NavItem {
 
 const STUDENT_NAV: NavItem[] = [
   { label: "My Bursary", href: "/portal/student/dashboard", sublabel: "Dashboard" },
-  { label: "Apply", href: "/apply", sublabel: "New Application" },
+  { label: "Apply", href: "/portal/student/apply", sublabel: "New Application" },
   { label: "Profile", href: "/portal/student/profile", sublabel: "Account" },
 ]
 

@@ -234,7 +234,7 @@ export function LoginScreen() {
             <p className="text-xs font-sans text-[#9CA3AF]">
               New student?{" "}
               <button
-                onClick={() => setMode("signup")}
+                onClick={() => { setMode("signup"); setActiveRole("student") }}
                 className="text-[#F5A623] font-semibold hover:underline cursor-pointer"
               >
                 Create an account

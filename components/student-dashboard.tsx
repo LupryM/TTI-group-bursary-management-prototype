@@ -299,7 +299,7 @@ function NoApplicationView({ user }: { user: NonNullable<ReturnType<typeof useAu
               Complete your bursary application to get started. You will need your SA ID number, proof of registration, academic record, and a financial need statement.
             </p>
             <Link
-              href="/apply"
+              href="/portal/student/apply"
               className="inline-block px-8 py-3 bg-[#F5A623] text-[#1A2B4A] text-sm font-semibold font-sans rounded-sm hover:bg-[#D4891A] hover:text-white transition-colors"
             >
               Start Application
