@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { MOCK_FUNDERS } from "@/lib/mock-data"
+import { getReadyDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  return NextResponse.json(MOCK_FUNDERS)
+  const db = await getReadyDb()
+  const result = await db.execute("SELECT * FROM funders ORDER BY rowid")
+  return NextResponse.json(result.rows)
 }
-
