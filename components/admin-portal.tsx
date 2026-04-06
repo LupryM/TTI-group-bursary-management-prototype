@@ -49,8 +49,14 @@ const statusBadge = (s: string) => {
 
 // ── Applications queue ────────────────────────────────────────────────────────
 
+interface FunderOption {
+  id: string
+  name: string
+}
+
 function AdminApplications() {
   const [apps, setApps] = useState<Application[]>([])
+  const [funders, setFunders] = useState<FunderOption[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<AppStatus | "All">("All")
@@ -60,15 +66,17 @@ function AdminApplications() {
   const [assignFunder, setAssignFunder] = useState("")
   const [assignAmount, setAssignAmount] = useState("")
 
-  const FUNDERS = ["Anglo American plc", "Sasol Bursaries", "Shell South Africa", "Nedbank Foundation"]
-
   useEffect(() => {
-    fetch("/api/applications")
-      .then((r) => r.json())
-      .then((data: Application[]) => {
-        setApps(data)
+    Promise.all([
+      fetch("/api/applications").then((r) => r.json()),
+      fetch("/api/funders").then((r) => r.json()),
+    ])
+      .then(([appData, funderData]) => {
+        setApps(appData)
+        setFunders(funderData)
         setLoadingData(false)
       })
+      .catch(() => setLoadingData(false))
   }, [])
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
@@ -350,7 +358,11 @@ function AdminApplications() {
                       className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
                     >
                       <option value="">{selected.funder && selected.funder !== "Unassigned" ? selected.funder : "Select funder…"}</option>
-                      {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
+                      {funders.length > 0 ? (
+                        funders.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)
+                      ) : (
+                        <option disabled>No funders available</option>
+                      )}
                     </select>
                   </div>
                   <div>
