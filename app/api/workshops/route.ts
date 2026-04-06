@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { getReadyDb } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
-export function GET(request: Request) {
-  const db = getDb()
+export async function GET(request: Request) {
+  const db = await getReadyDb()
   const { searchParams } = new URL(request.url)
   const studentId = searchParams.get("studentId")
 
-  let rows: Record<string, unknown>[]
-  if (studentId) {
-    rows = db.prepare("SELECT * FROM workshops WHERE student_id = ? ORDER BY id").all(studentId) as Record<string, unknown>[]
-  } else {
-    rows = db.prepare("SELECT * FROM workshops ORDER BY id").all() as Record<string, unknown>[]
-  }
+  const result = studentId
+    ? await db.execute({ sql: "SELECT * FROM workshops WHERE student_id = ? ORDER BY id", args: [studentId] })
+    : await db.execute("SELECT * FROM workshops ORDER BY id")
+
+  const rows = result.rows as Record<string, unknown>[]
 
   return NextResponse.json(
     rows.map((row) => ({

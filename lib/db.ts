@@ -1,32 +1,30 @@
-import Database from "better-sqlite3"
-import path from "path"
+import { createClient, type Client, type InArgs } from "@libsql/client"
 
-// Vercel's filesystem is read-only except for /tmp
-const DB_PATH = process.env.VERCEL
-  ? "/tmp/bursary.db"
-  : path.join(process.cwd(), "data", "bursary.db")
+let _client: Client | null = null
+let _initPromise: Promise<void> | null = null
 
-let _db: Database.Database | null = null
-
-export function getDb(): Database.Database {
-  if (!_db) {
-    // Ensure the data directory exists
-    const fs = require("fs")
-    const dir = path.dirname(DB_PATH)
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-
-    _db = new Database(DB_PATH)
-    _db.pragma("journal_mode = WAL")
-    _db.pragma("foreign_keys = ON")
-    initSchema(_db)
-    seedIfEmpty(_db)
+export function getDb(): Client {
+  if (!_client) {
+    _client = createClient({
+      url: process.env.TURSO_DATABASE_URL!,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    })
   }
-  return _db
+  return _client
 }
 
-function initSchema(db: Database.Database) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+export async function getReadyDb(): Promise<Client> {
+  const client = getDb()
+  if (!_initPromise) {
+    _initPromise = initSchema(client).then(() => seedIfEmpty(client))
+  }
+  await _initPromise
+  return client
+}
+
+async function initSchema(db: Client): Promise<void> {
+  await db.batch([
+    `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL,
@@ -45,9 +43,8 @@ function initSchema(db: Database.Database) {
       total_budget REAL,
       department TEXT,
       id_number TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS applications (
+    )`,
+    `CREATE TABLE IF NOT EXISTS applications (
       id TEXT PRIMARY KEY,
       student_name TEXT NOT NULL,
       student_no TEXT NOT NULL,
@@ -61,7 +58,6 @@ function initSchema(db: Database.Database) {
       id_verified INTEGER NOT NULL DEFAULT 0,
       docs_complete INTEGER NOT NULL DEFAULT 0,
       academic_avg REAL NOT NULL DEFAULT 0,
-      -- Extra fields from the application form
       id_number TEXT,
       email TEXT,
       phone TEXT,
@@ -69,9 +65,8 @@ function initSchema(db: Database.Database) {
       need_statement TEXT,
       ref_number TEXT,
       owner_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS funder_students (
+    )`,
+    `CREATE TABLE IF NOT EXISTS funder_students (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       student_no TEXT NOT NULL,
@@ -83,16 +78,14 @@ function initSchema(db: Database.Database) {
       status TEXT NOT NULL DEFAULT 'Approved',
       academic_avg REAL NOT NULL DEFAULT 0,
       funder_id TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS student_modules (
+    )`,
+    `CREATE TABLE IF NOT EXISTS student_modules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       funder_student_id TEXT NOT NULL REFERENCES funder_students(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       complete INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS workshops (
+    )`,
+    `CREATE TABLE IF NOT EXISTS workshops (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       date TEXT NOT NULL,
@@ -100,9 +93,8 @@ function initSchema(db: Database.Database) {
       facilitator TEXT NOT NULL,
       duration TEXT NOT NULL,
       student_id TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS funders (
+    )`,
+    `CREATE TABLE IF NOT EXISTS funders (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       contact TEXT NOT NULL,
@@ -111,9 +103,8 @@ function initSchema(db: Database.Database) {
       students INTEGER NOT NULL DEFAULT 0,
       level INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'Active'
-    );
-
-    CREATE TABLE IF NOT EXISTS application_audit (
+    )`,
+    `CREATE TABLE IF NOT EXISTS application_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       application_id TEXT NOT NULL,
       changed_at TEXT NOT NULL,
@@ -121,36 +112,36 @@ function initSchema(db: Database.Database) {
       field TEXT NOT NULL,
       old_value TEXT,
       new_value TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS student_documents (
+    )`,
+    `CREATE TABLE IF NOT EXISTS student_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       student_id TEXT NOT NULL,
       doc_type TEXT NOT NULL,
       file_name TEXT NOT NULL,
       uploaded_at TEXT NOT NULL,
       UNIQUE(student_id, doc_type)
-    );
-  `)
+    )`,
+  ], "write")
 
   // ── Migrations for databases created before this schema version ──────────────
   const migrations = [
     "ALTER TABLE users ADD COLUMN id_number TEXT",
   ]
   for (const sql of migrations) {
-    try { db.exec(sql) } catch { /* column already exists */ }
+    try { await db.execute(sql) } catch { /* column already exists */ }
   }
 
   // ── Recreate applications table if it still has the old CHECK constraint ─────
-  // SQLite does not support ALTER TABLE to change constraints, so we recreate.
   try {
-    const appTable = db.prepare(
+    const result = await db.execute(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='applications'"
-    ).get() as { sql: string } | undefined
-    if (appTable?.sql?.includes("CHECK") && appTable.sql.includes("'Pending'")) {
-      db.pragma("foreign_keys = off")
-      db.exec(`
-        CREATE TABLE applications_new (
+    )
+    const appTable = result.rows[0] as Record<string, unknown> | undefined
+    const appSql = appTable?.sql as string | undefined
+    if (appSql?.includes("CHECK") && appSql.includes("'Pending'")) {
+      await db.execute("PRAGMA foreign_keys = OFF")
+      await db.batch([
+        `CREATE TABLE applications_new (
           id TEXT PRIMARY KEY,
           student_name TEXT NOT NULL,
           student_no TEXT NOT NULL,
@@ -171,25 +162,27 @@ function initSchema(db: Database.Database) {
           need_statement TEXT,
           ref_number TEXT,
           owner_id TEXT
-        );
-        INSERT INTO applications_new SELECT * FROM applications;
-        DROP TABLE applications;
-        ALTER TABLE applications_new RENAME TO applications;
-      `)
-      db.prepare("UPDATE applications SET status = 'Submitted' WHERE status = 'Pending'").run()
-      db.pragma("foreign_keys = on")
+        )`,
+        "INSERT INTO applications_new SELECT * FROM applications",
+        "DROP TABLE applications",
+        "ALTER TABLE applications_new RENAME TO applications",
+      ], "write")
+      await db.execute("UPDATE applications SET status = 'Submitted' WHERE status = 'Pending'")
+      await db.execute("PRAGMA foreign_keys = ON")
     }
   } catch { /* already migrated */ }
 
   // ── Same for funder_students ──────────────────────────────────────────────────
   try {
-    const fsTable = db.prepare(
+    const result = await db.execute(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='funder_students'"
-    ).get() as { sql: string } | undefined
-    if (fsTable?.sql?.includes("CHECK") && fsTable.sql.includes("'Pending'")) {
-      db.pragma("foreign_keys = off")
-      db.exec(`
-        CREATE TABLE funder_students_new (
+    )
+    const fsTable = result.rows[0] as Record<string, unknown> | undefined
+    const fsSql = fsTable?.sql as string | undefined
+    if (fsSql?.includes("CHECK") && fsSql.includes("'Pending'")) {
+      await db.execute("PRAGMA foreign_keys = OFF")
+      await db.batch([
+        `CREATE TABLE funder_students_new (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           student_no TEXT NOT NULL,
@@ -201,25 +194,23 @@ function initSchema(db: Database.Database) {
           status TEXT NOT NULL DEFAULT 'Approved',
           academic_avg REAL NOT NULL DEFAULT 0,
           funder_id TEXT NOT NULL
-        );
-        INSERT INTO funder_students_new SELECT * FROM funder_students;
-        DROP TABLE funder_students;
-        ALTER TABLE funder_students_new RENAME TO funder_students;
-      `)
-      db.pragma("foreign_keys = on")
+        )`,
+        "INSERT INTO funder_students_new SELECT * FROM funder_students",
+        "DROP TABLE funder_students",
+        "ALTER TABLE funder_students_new RENAME TO funder_students",
+      ], "write")
+      await db.execute("PRAGMA foreign_keys = ON")
     }
   } catch { /* already migrated */ }
 }
 
-function seedIfEmpty(db: Database.Database) {
-  const count = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number }
-  if (count.c > 0) return
+async function seedIfEmpty(db: Client): Promise<void> {
+  const result = await db.execute("SELECT COUNT(*) as c FROM users")
+  const count = Number((result.rows[0] as Record<string, unknown>).c)
+  if (count > 0) return
 
   // ── Users ──────────────────────────────────────────────────────────────────
-  const insertUser = db.prepare(`
-    INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, funder_name, bursary_amount, status, company, bbbee_level, total_budget, department)
-    VALUES (@id, @name, @email, @role, @student_no, @ref_no, @institution, @programme, @year, @funder_name, @bursary_amount, @status, @company, @bbbee_level, @total_budget, @department)
-  `)
+  const userSql = `INSERT INTO users (id, name, email, role, student_no, ref_no, institution, programme, year, funder_name, bursary_amount, status, company, bbbee_level, total_budget, department) VALUES (@id, @name, @email, @role, @student_no, @ref_no, @institution, @programme, @year, @funder_name, @bursary_amount, @status, @company, @bbbee_level, @total_budget, @department)`
 
   const users = [
     { id: "student-1", name: "Thandi Mokoena", email: "thandi@student.up.ac.za", role: "student", student_no: "UP22/0045812", ref_no: "TTI-2026-8472", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder_name: "Anglo American plc", bursary_amount: 48500, status: "Approved", company: null, bbbee_level: null, total_budget: null, department: null },
@@ -231,16 +222,13 @@ function seedIfEmpty(db: Database.Database) {
     { id: "admin-1", name: "Lerato Sithole", email: "lerato@ttibursaries.co.za", role: "admin", student_no: null, ref_no: null, institution: null, programme: null, year: null, funder_name: null, bursary_amount: null, status: null, company: null, bbbee_level: null, total_budget: null, department: "Bursary Operations" },
   ]
 
-  const seedUsers = db.transaction(() => {
-    for (const u of users) insertUser.run(u)
-  })
-  seedUsers()
+  await db.batch(
+    users.map((u) => ({ sql: userSql, args: u as unknown as InArgs })),
+    "write"
+  )
 
   // ── Applications ───────────────────────────────────────────────────────────
-  const insertApp = db.prepare(`
-    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, owner_id, ref_number)
-    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @owner_id, @ref_number)
-  `)
+  const appSql = `INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, owner_id, ref_number) VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @owner_id, @ref_number)`
 
   const apps = [
     { id: "app-001", student_name: "Thandi Mokoena", student_no: "UP22/0045812", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder: "Anglo American plc", amount: 48500, status: "Approved", submitted_date: "12 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 72, owner_id: "student-1", ref_number: "TTI-2026-847201" },
@@ -251,40 +239,30 @@ function seedIfEmpty(db: Database.Database) {
     { id: "app-006", student_name: "Karabo Sithole", student_no: "TUT23/0041200", institution: "Tshwane University of Technology", programme: "National Diploma IT", year: "1st Year", funder: "Sasol Bursaries", amount: 35000, status: "Submitted", submitted_date: "10 Feb 2026", id_verified: 0, docs_complete: 0, academic_avg: 61, owner_id: null, ref_number: "TTI-2026-412009" },
   ]
 
-  const seedApps = db.transaction(() => {
-    for (const a of apps) insertApp.run(a)
-  })
-  seedApps()
+  await db.batch(
+    apps.map((a) => ({ sql: appSql, args: a as unknown as InArgs })),
+    "write"
+  )
 
   // ── Student Documents (seeded for logged-in demo students) ────────────────
-  const insertDoc = db.prepare(`
-    INSERT INTO student_documents (student_id, doc_type, file_name, uploaded_at)
-    VALUES (?, ?, ?, ?)
-  `)
+  const now = new Date().toISOString()
   const seededDocs: [string, string, string][] = [
-    // Thandi has 3 of 4 uploaded (missing photograph)
     ["student-1", "sa_id", "ID_Thandi_Mokoena.pdf"],
     ["student-1", "registration", "UP_Registration_2026.pdf"],
     ["student-1", "academic_record", "Transcript_UP22.pdf"],
-    // Sipho has 1 of 4 uploaded
     ["student-2", "sa_id", "ID_Sipho_Dlamini.pdf"],
   ]
-  const seedDocs = db.transaction(() => {
-    const now = new Date().toISOString()
-    for (const [sid, key, name] of seededDocs) insertDoc.run(sid, key, name, now)
-  })
-  seedDocs()
+  await db.batch(
+    seededDocs.map(([sid, key, name]) => ({
+      sql: "INSERT INTO student_documents (student_id, doc_type, file_name, uploaded_at) VALUES (?, ?, ?, ?)",
+      args: [sid, key, name, now],
+    })),
+    "write"
+  )
 
   // ── Funder Students ────────────────────────────────────────────────────────
-  const insertFS = db.prepare(`
-    INSERT INTO funder_students (id, name, student_no, institution, programme, year, amount, disbursed, status, academic_avg, funder_id)
-    VALUES (@id, @name, @student_no, @institution, @programme, @year, @amount, @disbursed, @status, @academic_avg, @funder_id)
-  `)
-  const insertModule = db.prepare(`
-    INSERT INTO student_modules (funder_student_id, name, complete)
-    VALUES (@funder_student_id, @name, @complete)
-  `)
-
+  const fsSql = `INSERT INTO funder_students (id, name, student_no, institution, programme, year, amount, disbursed, status, academic_avg, funder_id) VALUES (@id, @name, @student_no, @institution, @programme, @year, @amount, @disbursed, @status, @academic_avg, @funder_id)`
+  const moduleSql = "INSERT INTO student_modules (funder_student_id, name, complete) VALUES (@funder_student_id, @name, @complete)"
   const MODULES = ["Orientation", "Financial Literacy", "CV Writing", "Workplace Readiness", "Entrepreneurship"]
 
   const funderStudents = [
@@ -293,46 +271,40 @@ function seedIfEmpty(db: Database.Database) {
     { id: "fs-005", name: "Lwazi Motha", student_no: "SU22/0088341", institution: "Stellenbosch University", programme: "BEng Civil", year: "3rd Year", amount: 52000, disbursed: 52000, status: "Rejected", academic_avg: 48, funder_id: "funder-1", modules: [true, true, false, false, false] },
   ]
 
-  const seedFS = db.transaction(() => {
-    for (const fs of funderStudents) {
-      const { modules, ...rest } = fs
-      insertFS.run(rest)
-      modules.forEach((complete, i) => {
-        insertModule.run({ funder_student_id: fs.id, name: MODULES[i], complete: complete ? 1 : 0 })
+  const fsStatements: { sql: string; args: InArgs }[] = []
+  for (const fs of funderStudents) {
+    const { modules, ...rest } = fs
+    fsStatements.push({ sql: fsSql, args: rest as unknown as InArgs })
+    modules.forEach((complete, i) => {
+      fsStatements.push({
+        sql: moduleSql,
+        args: { funder_student_id: fs.id, name: MODULES[i], complete: complete ? 1 : 0 },
       })
-    }
-  })
-  seedFS()
+    })
+  }
+  await db.batch(fsStatements, "write")
 
   // ── Workshops ──────────────────────────────────────────────────────────────
-  const insertWS = db.prepare(`
-    INSERT INTO workshops (title, date, status, facilitator, duration, student_id)
-    VALUES (@title, @date, @status, @facilitator, @duration, @student_id)
-  `)
+  const wsSql = "INSERT INTO workshops (title, date, status, facilitator, duration, student_id) VALUES (@title, @date, @status, @facilitator, @duration, @student_id)"
 
   const workshops = [
-    // Thandi (student-1)
     { title: "Financial Literacy & Budgeting", date: "14 Mar 2026", status: "Attended", facilitator: "T. Nkosi", duration: "3 hrs", student_id: "student-1" },
     { title: "CV Writing & Professional Branding", date: "28 Mar 2026", status: "Attended", facilitator: "M. van Wyk", duration: "2 hrs", student_id: "student-1" },
     { title: "Workplace Readiness & Ethics", date: "11 Apr 2026", status: "Upcoming", facilitator: "S. Dlamini", duration: "4 hrs", student_id: "student-1" },
     { title: "Entrepreneurship & Business Planning", date: "25 Apr 2026", status: "Upcoming", facilitator: "R. Pillay", duration: "3 hrs", student_id: "student-1" },
-    // Sipho (student-2)
     { title: "Orientation & Programme Overview", date: "7 Mar 2026", status: "Attended", facilitator: "T. Nkosi", duration: "2 hrs", student_id: "student-2" },
     { title: "Financial Literacy & Budgeting", date: "21 Mar 2026", status: "Missed", facilitator: "T. Nkosi", duration: "3 hrs", student_id: "student-2" },
     { title: "CV Writing & Professional Branding", date: "4 Apr 2026", status: "Upcoming", facilitator: "M. van Wyk", duration: "2 hrs", student_id: "student-2" },
     { title: "Workplace Readiness & Ethics", date: "18 Apr 2026", status: "Upcoming", facilitator: "S. Dlamini", duration: "4 hrs", student_id: "student-2" },
   ]
 
-  const seedWS = db.transaction(() => {
-    for (const w of workshops) insertWS.run(w)
-  })
-  seedWS()
+  await db.batch(
+    workshops.map((w) => ({ sql: wsSql, args: w as unknown as InArgs })),
+    "write"
+  )
 
   // ── Funders ────────────────────────────────────────────────────────────────
-  const insertFunder = db.prepare(`
-    INSERT INTO funders (id, name, contact, email, budget, students, level, status)
-    VALUES (@id, @name, @contact, @email, @budget, @students, @level, @status)
-  `)
+  const funderSql = "INSERT INTO funders (id, name, contact, email, budget, students, level, status) VALUES (@id, @name, @contact, @email, @budget, @students, @level, @status)"
 
   const funders = [
     { id: "f1", name: "Shell South Africa", contact: "Michael Chen", email: "michael@shell.com", budget: 4000000, students: 5, level: 1, status: "Active" },
@@ -341,8 +313,8 @@ function seedIfEmpty(db: Database.Database) {
     { id: "f4", name: "Nedbank Foundation", contact: "Aisha Patel", email: "aisha@nedbank.co.za", budget: 1200000, students: 0, level: 2, status: "Pending Setup" },
   ]
 
-  const seedFunders = db.transaction(() => {
-    for (const f of funders) insertFunder.run(f)
-  })
-  seedFunders()
+  await db.batch(
+    funders.map((f) => ({ sql: funderSql, args: f as unknown as InArgs })),
+    "write"
+  )
 }

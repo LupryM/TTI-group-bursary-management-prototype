@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server"
-import { getDb } from "@/lib/db"
+import { getReadyDb } from "@/lib/db"
 
 /**
  * DEBUG ENDPOINT ONLY - Do not use in production
  * Returns all users and recent student signups
  */
-export function GET() {
-  const db = getDb()
+export async function GET() {
+  const db = await getReadyDb()
 
   try {
-    const allUsers = db.prepare(`
+    const allUsersResult = await db.execute(`
       SELECT id, name, email, role, status
       FROM users
       ORDER BY role, id DESC
-    `).all() as unknown[]
+    `)
 
-    const students = db.prepare(`
+    const studentsResult = await db.execute(`
       SELECT
         u.id,
         u.name,
@@ -28,9 +28,13 @@ export function GET() {
       WHERE u.role = 'student'
       GROUP BY u.id
       ORDER BY u.id DESC
-    `).all() as unknown[]
+    `)
 
-    return NextResponse.json({ all_users: allUsers, students, timestamp: new Date().toISOString() })
+    return NextResponse.json({
+      all_users: allUsersResult.rows,
+      students: studentsResult.rows,
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
