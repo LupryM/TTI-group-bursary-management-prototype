@@ -4,7 +4,7 @@ import { useState, useEffect, ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
-import { formatZAR, Workshop, Application } from "@/lib/mock-data"
+import { formatZAR, Workshop, Application, FunderStudent } from "@/lib/mock-data"
 import { REQUIRED_DOCS as REQUIRED_DOC_DEFS } from "@/lib/documents"
 
 // Map funder names to logo files
@@ -18,6 +18,8 @@ const SPONSOR_LOGOS: Record<string, string> = {
 const statusBadge = (variant: string) => {
   const base = "inline-flex items-center px-2.5 py-0.5 text-xs font-semibold tracking-wide font-sans rounded-sm"
   if (variant === "Approved") return `${base} bg-emerald-100 text-emerald-700`
+  if (variant === "Disbursed") return `${base} bg-emerald-100 text-emerald-700`
+  if (variant === "Approved (Awaiting Payout)") return `${base} bg-amber-100 text-amber-700`
   if (variant === "Under Review") return `${base} bg-amber-100 text-amber-700`
   if (variant === "Submitted") return `${base} bg-[#F5F6F8] text-[#6B7280] border border-[#E5E7EB]`
   if (variant === "Rejected") return `${base} bg-red-100 text-red-600`
@@ -465,21 +467,28 @@ interface BursaryHolderViewProps {
   docState: DocState
   workshops: Workshop[]
   workshopsLoading: boolean
+  studentRecord: { disbursed: number; status: string } | null
 }
 
-function BursaryHolderView({ app, docState, workshops, workshopsLoading }: BursaryHolderViewProps) {
+function BursaryHolderView({ app, docState, workshops, workshopsLoading, studentRecord }: BursaryHolderViewProps) {
   const { user } = useAuth()
   const { uploads } = docState
   const completedDocs = Object.values(uploads).filter(Boolean).length
   const totalDocs = REQUIRED_DOC_DEFS.length
 
+  const disbursed = studentRecord?.disbursed ?? 0
+  const displayStatus = app.status === "Approved"
+    ? (disbursed > 0 ? "Disbursed" : "Approved (Awaiting Payout)")
+    : app.status
+
   const bursaryDetails = [
-    { label: "Application Status", value: app.status, isBadge: true },
+    { label: "Bursary Status", value: displayStatus, isBadge: true },
     { label: "Academic Year", value: "2026", isBadge: false },
     { label: "Funder", value: app.funder, isBadge: false },
     { label: "Institution", value: app.institution, isBadge: false },
     { label: "Programme", value: app.programme, isBadge: false },
-    { label: "Bursary Amount", value: formatZAR(app.amount), isBadge: true, variant: "gold" },
+    { label: "Total Bursary", value: formatZAR(app.amount), isBadge: true, variant: "gold" },
+    { label: "Amount Disbursed", value: formatZAR(disbursed), isBadge: true, variant: disbursed > 0 ? "Disbursed" : "Approved (Awaiting Payout)" },
   ]
 
   return (
@@ -516,7 +525,7 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading }: Bursa
       {/* Progress strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Status", value: app.status },
+          { label: "Status", value: displayStatus },
           { label: "Year", value: app.year },
           { label: "Documents", value: `${completedDocs} / ${totalDocs}` },
           { label: "Workshops", value: `${workshops.filter(w => w.status === "Attended").length} / ${workshops.length}` },
@@ -688,6 +697,7 @@ export function StudentDashboard() {
   const [appLoading, setAppLoading] = useState(true)
   const [workshops, setWorkshops] = useState<Workshop[]>([])
   const [workshopsLoading, setWorkshopsLoading] = useState(true)
+  const [studentRecord, setStudentRecord] = useState<{ disbursed: number; status: string } | null>(null)
 
   const docState = useDocState(user?.id ?? "")
 
@@ -708,6 +718,17 @@ export function StudentDashboard() {
       .then((r) => r.json())
       .then((data: Workshop[]) => { setWorkshops(data); setWorkshopsLoading(false) })
       .catch(() => setWorkshopsLoading(false))
+
+    // Fetch funder_students record to get real-time disbursed amount
+    if (user.studentNo) {
+      fetch("/api/students")
+        .then((r) => r.json())
+        .then((data: FunderStudent[]) => {
+          const match = data.find((s) => s.studentNo === user.studentNo)
+          if (match) setStudentRecord({ disbursed: match.disbursed, status: match.status })
+        })
+        .catch(() => {})
+    }
   }, [user])
 
   if (!user || user.role !== "student") return null
@@ -751,6 +772,7 @@ export function StudentDashboard() {
         docState={docState}
         workshops={workshops}
         workshopsLoading={workshopsLoading}
+        studentRecord={studentRecord}
       />
     )
   }
