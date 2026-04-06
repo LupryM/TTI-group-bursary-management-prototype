@@ -402,9 +402,6 @@ function AdminSkillsTracker() {
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
   const [filterInstitution, setFilterInstitution] = useState("")
   const [filterCompletion, setFilterCompletion] = useState("")
-  const [filterPayment, setFilterPayment] = useState("")
-  const [disbursedInput, setDisbursedInput] = useState<Record<string, string>>({})
-  const [disbursedLoading, setDisbursedLoading] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/students")
@@ -445,42 +442,9 @@ function AdminSkillsTracker() {
     }
   }
 
-  const confirmDisbursement = async (studentId: string) => {
-    const raw = disbursedInput[studentId] ?? ""
-    const amount = parseFloat(raw)
-    if (raw === "" || isNaN(amount) || amount < 0) {
-      showToast("Please enter a valid disbursement amount.")
-      return
-    }
-    setDisbursedLoading(studentId)
-    try {
-      const res = await fetch("/api/students", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, disbursed: amount }),
-      })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === studentId
-            ? { ...s, disbursed: data.disbursed, status: data.status }
-            : s
-        )
-      )
-      setDisbursedInput((prev) => { const n = { ...prev }; delete n[studentId]; return n })
-      showToast(`Disbursement confirmed: ${formatZAR(amount)}`)
-    } catch {
-      showToast("Failed to confirm disbursement. Please try again.")
-    } finally {
-      setDisbursedLoading(null)
-    }
-  }
-
   const avgProgress = students.length
     ? Math.round(students.reduce((a, s) => a + progressPct(s.modules), 0) / students.length)
     : 0
-  const totalDisbursed = students.reduce((a, s) => a + s.disbursed, 0)
   const totalActive = students.filter((s) => s.status === "Approved" || s.status === "Disbursed").length
 
   const filtered = students.filter((s) => {
@@ -494,11 +458,8 @@ function AdminSkillsTracker() {
       (filterCompletion === "0" && pct === 0) ||
       (filterCompletion === "incomplete" && pct > 0 && pct < 100) ||
       (filterCompletion === "100" && pct === 100)
-    const matchPayment =
-      !filterPayment ||
-      (filterPayment === "awaiting" && s.disbursed === 0) ||
-      (filterPayment === "disbursed" && s.disbursed > 0)
-    return matchSearch && matchInstitution && matchCompletion && matchPayment
+    
+    return matchSearch && matchInstitution && matchCompletion
   })
 
   const institutions = Array.from(new Set(students.map((s) => s.institution))).sort()
@@ -521,11 +482,10 @@ function AdminSkillsTracker() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 mb-8 border border-[#E5E7EB] bg-white divide-x divide-[#E5E7EB] rounded-sm overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 mb-8 border border-[#E5E7EB] bg-white divide-y sm:divide-y-0 sm:divide-x divide-[#E5E7EB] rounded-sm overflow-hidden">
         {[
           { label: "Total Students", value: String(students.length) },
           { label: "Active Bursaries", value: String(totalActive) },
-          { label: "Total Disbursed", value: formatZAR(totalDisbursed) },
           { label: "Avg. Completion", value: `${avgProgress}%` },
         ].map((kpi) => (
           <div key={kpi.label} className="px-5 py-4">
@@ -578,19 +538,6 @@ function AdminSkillsTracker() {
             <option value="100">All complete</option>
           </select>
         </div>
-        <div>
-          <label htmlFor="filter-payment" className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans mb-1 block">Payment</label>
-          <select
-            id="filter-payment"
-            value={filterPayment}
-            onChange={(e) => setFilterPayment(e.target.value)}
-            className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
-          >
-            <option value="">All statuses</option>
-            <option value="awaiting">Awaiting Payout</option>
-            <option value="disbursed">Disbursed</option>
-          </select>
-        </div>
       </div>
 
       {loadingData ? (
@@ -602,7 +549,6 @@ function AdminSkillsTracker() {
           {filtered.map((s) => {
             const pct = progressPct(s.modules)
             const completedCount = s.modules.filter((m) => m.complete).length
-            const isDisbursed = s.disbursed > 0
             return (
               <div key={s.id} className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
                 {/* Student header */}
@@ -611,35 +557,12 @@ function AdminSkillsTracker() {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <p className="font-semibold text-[#1A1A2E] text-sm font-sans">{s.name}</p>
                       <span className="text-[10px] font-mono text-[#9CA3AF]">{s.studentNo}</span>
-                      {/* Payment status badge */}
-                      {isDisbursed ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-700">
-                          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                            <circle cx="5" cy="5" r="4.5" fill="currentColor" opacity="0.2"/>
-                            <path d="M2.5 5.5L4 7L7.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                          </svg>
-                          Disbursed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700">
-                          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                            <circle cx="5" cy="5" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
-                            <path d="M5 3v2.5M5 7v.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                          </svg>
-                          Awaiting Payout
-                        </span>
-                      )}
+                      
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#1A2B4A]/5 border border-[#1A2B4A]/10 text-xs font-mono font-semibold text-[#1A2B4A]">
+                        Award: {formatZAR(s.amount)}
+                      </span>
                     </div>
                     <p className="text-xs text-[#6B7280] mt-0.5">{s.institution} &mdash; {s.programme}</p>
-                    {/* Financial line */}
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans">Disbursed</span>
-                      <span className={`text-xs font-semibold font-mono ${isDisbursed ? "text-emerald-600" : "text-amber-600"}`}>
-                        {formatZAR(s.disbursed)}
-                      </span>
-                      <span className="text-[10px] text-[#D1D5DB]">/</span>
-                      <span className="text-xs font-semibold font-mono text-[#F5A623]">{formatZAR(s.amount)}</span>
-                    </div>
                   </div>
                   <div className="flex-shrink-0 sm:text-right">
                     <div className="flex sm:justify-end items-center gap-2 mb-1.5">
@@ -700,44 +623,6 @@ function AdminSkillsTracker() {
                       </div>
                     )
                   })}
-                </div>
-
-                {/* Disbursement panel */}
-                <div className="px-5 py-3 border-t border-[#E5E7EB] bg-[#F5F6F8]">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] mb-2.5">Financial Disbursement</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex-1 min-w-[140px]">
-                      <input
-                        type="number"
-                        min="0"
-                        max={s.amount}
-                        step="100"
-                        placeholder={isDisbursed ? `Current: ${s.disbursed}` : `Max: ${s.amount}`}
-                        value={disbursedInput[s.id] ?? ""}
-                        onChange={(e) => setDisbursedInput((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                        className="w-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-mono rounded-sm outline-none focus:border-[#F5A623] transition-colors"
-                        aria-label={`Disbursement amount for ${s.name}`}
-                      />
-                    </div>
-                    <button
-                      onClick={() => confirmDisbursement(s.id)}
-                      disabled={disbursedLoading === s.id || !(disbursedInput[s.id] ?? "")}
-                      className="px-4 py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white rounded-sm hover:bg-[#F5A623] hover:text-[#1A2B4A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
-                    >
-                      {disbursedLoading === s.id ? "Saving…" : isDisbursed ? "Update Disbursement" : "Confirm Disbursement"}
-                    </button>
-                    {isDisbursed && (
-                      <button
-                        onClick={() => {
-                          setDisbursedInput((prev) => ({ ...prev, [s.id]: "0" }))
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold font-sans border border-[#E5E7EB] text-[#9CA3AF] rounded-sm hover:bg-white hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer whitespace-nowrap"
-                        title="Reset disbursement to 0"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
             )
