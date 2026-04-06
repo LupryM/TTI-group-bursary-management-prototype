@@ -711,6 +711,18 @@ export function StudentDashboard() {
         const approved = apps.find((a) => a.status === "Approved")
         setSelectedApp(approved ?? apps[apps.length - 1] ?? null)
         setAppLoading(false)
+
+        // Fetch the funder_students record using the approved app's studentNo —
+        // this is the same value stored during provisioning, so the match is reliable
+        if (approved?.studentNo) {
+          fetch("/api/students")
+            .then((r) => r.json())
+            .then((data: FunderStudent[]) => {
+              const match = data.find((s) => s.studentNo === approved.studentNo)
+              if (match) setStudentRecord({ disbursed: match.disbursed, status: match.status })
+            })
+            .catch(() => {})
+        }
       })
       .catch(() => setAppLoading(false))
 
@@ -718,17 +730,6 @@ export function StudentDashboard() {
       .then((r) => r.json())
       .then((data: Workshop[]) => { setWorkshops(data); setWorkshopsLoading(false) })
       .catch(() => setWorkshopsLoading(false))
-
-    // Fetch funder_students record to get real-time disbursed amount
-    if (user.studentNo) {
-      fetch("/api/students")
-        .then((r) => r.json())
-        .then((data: FunderStudent[]) => {
-          const match = data.find((s) => s.studentNo === user.studentNo)
-          if (match) setStudentRecord({ disbursed: match.disbursed, status: match.status })
-        })
-        .catch(() => {})
-    }
   }, [user])
 
   if (!user || user.role !== "student") return null
