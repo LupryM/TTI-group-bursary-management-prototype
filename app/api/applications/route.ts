@@ -186,8 +186,8 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
 
   const fsId = `fs-${Date.now()}`
   await db.execute({
-    sql: `INSERT INTO funder_students (id, name, student_no, institution, programme, year, amount, disbursed, status, academic_avg, funder_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'Approved', ?, ?)`,
+    sql: `INSERT INTO funder_students (id, name, student_no, institution, programme, year, amount, disbursed, status, academic_avg, funder_id, owner_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'Approved', ?, ?, ?)`,
     args: [
       fsId,
       app.student_name as string,
@@ -198,6 +198,7 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
       (app.amount ?? 0) as number,
       (app.academic_avg ?? 0) as number,
       funderId,
+      (app.owner_id as string | null) ?? null,
     ],
   })
 

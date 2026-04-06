@@ -7,10 +7,13 @@ export async function GET(request: Request) {
   const db = await getReadyDb()
   const { searchParams } = new URL(request.url)
   const funderId = searchParams.get("funderId")
+  const ownerId = searchParams.get("ownerId")
 
-  const rowsResult = funderId
-    ? await db.execute({ sql: "SELECT * FROM funder_students WHERE funder_id = ?", args: [funderId] })
-    : await db.execute("SELECT * FROM funder_students")
+  const rowsResult = ownerId
+    ? await db.execute({ sql: "SELECT * FROM funder_students WHERE owner_id = ?", args: [ownerId] })
+    : funderId
+      ? await db.execute({ sql: "SELECT * FROM funder_students WHERE funder_id = ?", args: [funderId] })
+      : await db.execute("SELECT * FROM funder_students")
 
   const rows = rowsResult.rows as Record<string, unknown>[]
 

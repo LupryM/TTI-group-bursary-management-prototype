@@ -88,9 +88,17 @@ export async function getReadyDb() {
       disbursed REAL DEFAULT 0,
       status TEXT,
       academic_avg REAL,
-      funder_id TEXT
+      funder_id TEXT,
+      owner_id TEXT
     )
   `)
+
+  // Migration: add owner_id to existing funder_students tables that don't have it
+  try {
+    await client.execute(`ALTER TABLE funder_students ADD COLUMN owner_id TEXT`)
+  } catch {
+    // Column already exists — safe to ignore
+  }
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS student_modules (

@@ -712,14 +712,12 @@ export function StudentDashboard() {
         setSelectedApp(approved ?? apps[apps.length - 1] ?? null)
         setAppLoading(false)
 
-        // Fetch the funder_students record using the approved app's studentNo —
-        // this is the same value stored during provisioning, so the match is reliable
-        if (approved?.studentNo) {
-          fetch("/api/students")
+        // Fetch the funder_students record directly by owner_id (always present, never empty)
+        if (approved) {
+          fetch(`/api/students?ownerId=${encodeURIComponent(user.id)}`)
             .then((r) => r.json())
             .then((data: FunderStudent[]) => {
-              const match = data.find((s) => s.studentNo === approved.studentNo)
-              if (match) setStudentRecord({ disbursed: match.disbursed, status: match.status })
+              if (data[0]) setStudentRecord({ disbursed: data[0].disbursed, status: data[0].status })
             })
             .catch(() => {})
         }
