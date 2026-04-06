@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { MockUser, useAuth } from "@/lib/auth-context"
 import { SignupForm } from "@/components/signup-form"
 
@@ -45,12 +46,26 @@ const roleConfig: Record<RoleTab, { label: string; description: string; icon: Re
 }
 
 export function LoginScreen() {
-  const { login, users, loading: usersLoading } = useAuth()
+  const { login, users, loading: usersLoading, user } = useAuth()
+  const router = useRouter()
   const [mode, setMode] = useState<Mode>("signin")
   const [activeRole, setActiveRole] = useState<RoleTab>("student")
   const [selectedUserId, setSelectedUserId] = useState<string>("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  // Redirect to appropriate portal if user just signed up
+  useEffect(() => {
+    if (user && !usersLoading) {
+      if (user.role === "student") {
+        router.replace("/portal/student/apply")
+      } else if (user.role === "funder") {
+        router.replace("/portal/funder/overview")
+      } else if (user.role === "admin") {
+        router.replace("/portal/admin/applications")
+      }
+    }
+  }, [user, usersLoading, router])
 
   const usersForRole = users.filter((u) => u.role === activeRole)
 
