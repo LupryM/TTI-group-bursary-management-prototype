@@ -249,7 +249,9 @@ function AdminApplications() {
                     <span className={statusBadge(app.status)}>{app.status}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs text-[#F5A623] font-sans hover:underline">Review</span>
+                    <span className="text-xs text-[#F5A623] font-sans hover:underline">
+                      {app.status === "Approved" || app.status === "Rejected" ? "View" : "Review"}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -316,38 +318,40 @@ function AdminApplications() {
                 </div>
               </div>
 
-              {/* Funder / amount assignment — always available */}
-              <div className="border border-[#E5E7EB] bg-[#F5F6F8] rounded-sm p-3 flex flex-col gap-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Assign Funder &amp; Amount</p>
-                <div>
-                  <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Funder</label>
-                  <select
-                    value={assignFunder}
-                    onChange={(e) => setAssignFunder(e.target.value)}
-                    className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
+              {/* Funder / amount assignment — only if not finally decided */}
+              {selected.status !== "Approved" && selected.status !== "Rejected" && (
+                <div className="border border-[#E5E7EB] bg-[#F5F6F8] rounded-sm p-3 flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Assign Funder &amp; Amount</p>
+                  <div>
+                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Funder</label>
+                    <select
+                      value={assignFunder}
+                      onChange={(e) => setAssignFunder(e.target.value)}
+                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
+                    >
+                      <option value="">{selected.funder && selected.funder !== "Unassigned" ? selected.funder : "Select funder…"}</option>
+                      {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Bursary Amount (ZAR)</label>
+                    <input
+                      type="text"
+                      value={assignAmount}
+                      onChange={(e) => setAssignAmount(e.target.value)}
+                      placeholder={selected.amount ? String(selected.amount) : "e.g. 45000"}
+                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans font-mono outline-none focus:border-[#F5A623] rounded-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={saveAssignment}
+                    disabled={actionLoading || (!assignFunder && !assignAmount)}
+                    className="w-full py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
                   >
-                    <option value="">{selected.funder && selected.funder !== "Unassigned" ? selected.funder : "Select funder…"}</option>
-                    {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
+                    {actionLoading ? "Saving…" : "Save Assignment"}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Bursary Amount (ZAR)</label>
-                  <input
-                    type="text"
-                    value={assignAmount}
-                    onChange={(e) => setAssignAmount(e.target.value)}
-                    placeholder={selected.amount ? String(selected.amount) : "e.g. 45000"}
-                    className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans font-mono outline-none focus:border-[#F5A623] rounded-sm"
-                  />
-                </div>
-                <button
-                  onClick={saveAssignment}
-                  disabled={actionLoading || (!assignFunder && !assignAmount)}
-                  className="w-full py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
-                >
-                  {actionLoading ? "Saving…" : "Save Assignment"}
-                </button>
-              </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Status:</span>
@@ -378,14 +382,6 @@ function AdminApplications() {
                     Reject
                   </button>
                 </div>
-              )}
-              {(selected.status === "Approved" || selected.status === "Rejected") && (
-                <button
-                  onClick={() => updateStatus(selected.id, "Under Review")}
-                  className="w-full py-2.5 text-xs font-semibold font-sans border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F5F6F8] rounded-sm transition-colors cursor-pointer"
-                >
-                  Revert to Under Review
-                </button>
               )}
             </div>
           </div>
