@@ -226,16 +226,20 @@ export function LoginScreen() {
             )}
           </div>
 
-          {/* Footer note + Apply link */}
+          {/* Footer note */}
           <div className="text-center mt-6 space-y-2">
             <p className="text-[10px] text-[#9CA3AF] font-sans">
               &copy; {new Date().getFullYear()} TTI Group &mdash; POPIA Compliant &middot; B-BBEE Level 1
             </p>
-            <p className="text-xs font-sans">
-              <span className="text-[#9CA3AF]">Not ready to sign in? </span>
-              <a href="/apply" className="text-[#F5A623] font-semibold hover:underline">
-                Submit an application
-              </a>
+            <p className="text-xs font-sans text-[#9CA3AF]">
+              New student?{" "}
+              <button
+                onClick={() => setMode("signup")}
+                className="text-[#F5A623] font-semibold hover:underline cursor-pointer"
+              >
+                Create an account
+              </button>
+              {" "}to apply for a bursary.
             </p>
           </div>
         </div>
