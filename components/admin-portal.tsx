@@ -392,7 +392,8 @@ function AdminApplications() {
               {selected.status === "Submitted" && (
                 <div className="flex gap-2">
                   <button
-                    disabled={actionLoading}
+                    disabled={actionLoading || assignFunder !== "" || assignAmount !== ""}
+                    title={assignFunder !== "" || assignAmount !== "" ? "Click 'Save Assignment' first!" : ""}
                     onClick={() => updateStatus(selected.id, "Approved")}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
@@ -477,8 +478,8 @@ function AdminSkillsTracker() {
 
   const filtered = students.filter((s) => {
     const matchSearch =
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.institution.toLowerCase().includes(search.toLowerCase())
+      (s.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.institution || "").toLowerCase().includes(search.toLowerCase())
     const matchInstitution = !filterInstitution || s.institution === filterInstitution
     const pct = progressPct(s.modules)
     const matchCompletion =
@@ -764,8 +765,8 @@ function AdminTreasury() {
 
   const filtered = students.filter((s) => {
     const matchSearch =
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.studentNo.toLowerCase().includes(search.toLowerCase())
+      (s.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.studentNo || "").toLowerCase().includes(search.toLowerCase())
     const matchPayment =
       !filterPayment ||
       (filterPayment === "awaiting" && s.disbursed === 0) ||
