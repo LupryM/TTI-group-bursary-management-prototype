@@ -76,7 +76,8 @@ export function SignupForm({ onCancel }: { onCancel: () => void }) {
     if (!form.institution) errs.institution = "Select an institution"
     if (!form.programme.trim()) errs.programme = "Required"
     if (!form.year) errs.year = "Select year"
-    if (form.idNumber && !/^\d{13}$/.test(form.idNumber.replace(/\s/g, "")))
+    if (!form.idNumber.trim()) errs.idNumber = "Required"
+    else if (!/^\d{13}$/.test(form.idNumber.replace(/\s/g, "")))
       errs.idNumber = "SA ID must be exactly 13 digits."
     if (!form.consent) errs._form = "You must accept the terms to create an account."
     setErrors(errs)
@@ -170,9 +171,7 @@ export function SignupForm({ onCancel }: { onCancel: () => void }) {
       </div>
 
       <div>
-        <label htmlFor="su-idno" className={labelCls}>
-          SA ID Number <span className="text-[#9CA3AF] normal-case tracking-normal">(optional — links an existing application)</span>
-        </label>
+        <label htmlFor="su-idno" className={labelCls}>SA ID Number</label>
         <input
           id="su-idno"
           className={errors.idNumber ? errCls : inputCls}
