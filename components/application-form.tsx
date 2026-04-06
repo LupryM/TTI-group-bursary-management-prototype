@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
-import { REQUIRED_DOCS, getOrCreateGuestOwnerId, clearGuestOwnerId } from "@/lib/documents"
+import { REQUIRED_DOCS, getOrCreateGuestOwnerId } from "@/lib/documents"
 
 const inputCls =
   "w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors placeholder:text-[#9CA3AF] rounded-sm disabled:bg-[#F5F6F8] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
@@ -210,42 +210,16 @@ export function ApplicationForm() {
       const data = await res.json()
       setRefNumber(data.refNumber)
       setFormState("success")
-      // Guest ids are single-use: clear so a subsequent application starts
-      // fresh rather than inheriting the previous applicant's uploads.
-      if (!isStudent) clearGuestOwnerId()
     } catch {
       setFormState("error")
     }
-  }
-
-  const resetForm = () => {
-    setFormState("idle")
-    setErrors({})
-    setDocUploads(Object.fromEntries(REQUIRED_DOCS.map((d) => [d.key, null])))
-    // Issue a new ownerId for the next application (students keep their id)
-    if (!isStudent) setOwnerId(getOrCreateGuestOwnerId())
-    setForm({
-      firstName: isStudent ? (user?.name.split(" ")[0] ?? "") : "",
-      lastName: isStudent ? (user?.name.split(" ").slice(1).join(" ") ?? "") : "",
-      idNumber: "",
-      studentNumber: isStudent ? (user?.studentNo ?? "") : "",
-      email: isStudent ? (user?.email ?? "") : "",
-      phone: "",
-      university: isStudent ? (user?.institution ?? "") : "",
-      programme: isStudent ? (user?.programme ?? "") : "",
-      year: isStudent ? (user?.year ?? "") : "",
-      annualIncome: "",
-      needStatement: "",
-      consent: false,
-    })
   }
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (formState === "success") {
     return (
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12 font-sans">
-        {/* Confirmation card */}
-        <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden shadow-sm mb-6">
+        <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden shadow-sm">
           <div className="flex items-stretch">
             <div className="w-1.5 bg-[#F5A623] flex-shrink-0" aria-hidden="true" />
             <div className="p-8">
@@ -259,8 +233,8 @@ export function ApplicationForm() {
                 Thank you, {form.firstName}
               </h2>
               <p className="text-sm text-[#6B7280] leading-relaxed mb-6 max-w-lg">
-                Your bursary application has been successfully submitted. Our team will review your application and contact you within{" "}
-                <span className="font-medium text-[#1A1A2E]">5–7 business days</span>. Please quote your reference number in all future correspondence.
+                Your application has been submitted. Our team will review it and contact you within{" "}
+                <span className="font-medium text-[#1A1A2E]">5–7 business days</span>. Quote your reference number in all correspondence.
               </p>
               <div className="bg-[#F5F6F8] border border-[#E5E7EB] px-5 py-4 flex items-center justify-between mb-6 rounded-sm">
                 <div>
@@ -274,25 +248,14 @@ export function ApplicationForm() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={resetForm}
-                className="text-xs font-semibold font-sans text-[#6B7280] hover:text-[#1A2B4A] underline underline-offset-2 transition-colors cursor-pointer"
+              <a
+                href="/portal/student/dashboard"
+                className="inline-block px-6 py-2.5 text-sm font-semibold font-sans bg-[#F5A623] text-[#1A2B4A] hover:bg-[#D4891A] hover:text-white rounded-sm transition-colors"
               >
-                Submit another application
-              </button>
+                View application status →
+              </a>
             </div>
           </div>
-        </div>
-
-        {/* Link back to dashboard */}
-        <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-sm px-6 py-4 flex items-center justify-between">
-          <p className="text-sm text-[#6B7280] font-sans">Track your application status in your student portal.</p>
-          <a
-            href="/portal/student/dashboard"
-            className="text-sm font-semibold font-sans text-[#F5A623] hover:underline whitespace-nowrap ml-4"
-          >
-            Go to dashboard →
-          </a>
         </div>
       </main>
     )
@@ -315,7 +278,7 @@ export function ApplicationForm() {
               <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2" />
               <path d="M6 4v3M6 8.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
-            Some fields have been pre-filled from your profile.
+            Some fields are pre-filled from your profile — you can correct them before submitting.
           </div>
         )}
       </div>
@@ -327,12 +290,12 @@ export function ApplicationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label htmlFor="app-firstName" className={labelCls}>First Name</label>
-                <input id="app-firstName" className={errors.firstName ? inputErrCls : inputCls} value={form.firstName} onChange={set("firstName")} placeholder="Given name" disabled={isStudent && !!form.firstName} />
+                <input id="app-firstName" className={errors.firstName ? inputErrCls : inputCls} value={form.firstName} onChange={set("firstName")} placeholder="Given name" />
                 <FieldError msg={errors.firstName} />
               </div>
               <div>
                 <label htmlFor="app-lastName" className={labelCls}>Last Name</label>
-                <input id="app-lastName" className={errors.lastName ? inputErrCls : inputCls} value={form.lastName} onChange={set("lastName")} placeholder="Surname" disabled={isStudent && !!form.lastName} />
+                <input id="app-lastName" className={errors.lastName ? inputErrCls : inputCls} value={form.lastName} onChange={set("lastName")} placeholder="Surname" />
                 <FieldError msg={errors.lastName} />
               </div>
               <div>
@@ -342,11 +305,11 @@ export function ApplicationForm() {
               </div>
               <div>
                 <label htmlFor="app-sno" className={labelCls}>Student Number</label>
-                <input id="app-sno" className={inputCls} value={form.studentNumber} onChange={set("studentNumber")} placeholder="If already registered" disabled={isStudent && !!form.studentNumber} />
+                <input id="app-sno" className={inputCls} value={form.studentNumber} onChange={set("studentNumber")} placeholder="If already registered" />
               </div>
               <div>
                 <label htmlFor="app-email" className={labelCls}>Email Address</label>
-                <input id="app-email" type="email" className={errors.email ? inputErrCls : inputCls} value={form.email} onChange={set("email")} placeholder="you@institution.ac.za" disabled={isStudent && !!form.email} />
+                <input id="app-email" type="email" className={errors.email ? inputErrCls : inputCls} value={form.email} onChange={set("email")} placeholder="you@institution.ac.za" />
                 <FieldError msg={errors.email} />
               </div>
               <div>
@@ -361,7 +324,7 @@ export function ApplicationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="sm:col-span-2">
                 <label htmlFor="app-uni" className={labelCls}>Institution</label>
-                <select id="app-uni" className={`${errors.university ? inputErrCls : inputCls} appearance-none`} value={form.university} onChange={set("university")} disabled={isStudent && !!form.university}>
+                <select id="app-uni" className={`${errors.university ? inputErrCls : inputCls} appearance-none`} value={form.university} onChange={set("university")}>
                   <option value="">Select institution…</option>
                   {UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
@@ -369,7 +332,7 @@ export function ApplicationForm() {
               </div>
               <div>
                 <label htmlFor="app-prog" className={labelCls}>Programme / Qualification</label>
-                <input id="app-prog" className={errors.programme ? inputErrCls : inputCls} value={form.programme} onChange={set("programme")} placeholder="e.g. BSc Computer Science" disabled={isStudent && !!form.programme} />
+                <input id="app-prog" className={errors.programme ? inputErrCls : inputCls} value={form.programme} onChange={set("programme")} placeholder="e.g. BSc Computer Science" />
                 <FieldError msg={errors.programme} />
               </div>
               <div>
