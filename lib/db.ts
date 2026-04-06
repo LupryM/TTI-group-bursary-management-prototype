@@ -1,7 +1,8 @@
 import { createClient } from "@libsql/client"
 
 const client = createClient({
-  url: "file:tti_bursary.db",
+  url: process.env.TURSO_DATABASE_URL || "file:tti_bursary.db",
+  authToken: process.env.TURSO_AUTH_TOKEN,
 })
 
 export async function getReadyDb() {
