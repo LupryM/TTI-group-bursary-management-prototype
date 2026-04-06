@@ -5,7 +5,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { formatZAR, Workshop, Application, FunderStudent } from "@/lib/mock-data"
-import { REQUIRED_DOCS as REQUIRED_DOC_DEFS } from "@/lib/documents"
+import { REQUIRED_DOCS, OPTIONAL_DOCS, REQUIRED_DOC_COUNT } from "@/lib/documents"
+
 
 // Map funder names to logo files
 const SPONSOR_LOGOS: Record<string, string> = {
@@ -74,13 +75,14 @@ function useDocState(userId: string): DocState {
       .then((r) => r.json())
       .then((data: { docs: Record<string, DocInfo | null> }) => {
         const next: Record<string, DocInfo | null> = {}
-        for (const d of REQUIRED_DOC_DEFS) next[d.key] = data.docs?.[d.key] ?? null
+        const allDocKeys = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].map(d => d.key)
+        for (const k of allDocKeys) next[k] = data.docs?.[k] ?? null
         setUploads(next)
       })
       .catch(() => {})
   }, [userId])
 
-  const docLabel = (key: string) => REQUIRED_DOC_DEFS.find((d) => d.key === key)?.label ?? key
+  const docLabel = (key: string) => [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find((d) => d.key === key)?.label ?? key
 
   const handleFileUpload = async (file: File) => {
     setUploadError(null)
@@ -153,25 +155,30 @@ function DocumentPanel({ docState }: { docState: DocState }) {
     uploads, selectedDocType, setSelectedDocType, dragOver, setDragOver,
     uploadError, uploadSuccess, handleDrop, handleFileChange,
   } = docState
-  const completedDocs = Object.values(uploads).filter(Boolean).length
-  const totalDocs = REQUIRED_DOC_DEFS.length
-  const docLabel = (key: string) => REQUIRED_DOC_DEFS.find((d) => d.key === key)?.label ?? key
+  
+  const requiredKeys = REQUIRED_DOCS.map(d => d.key)
+  const completedDocs = Object.keys(uploads).filter(k => requiredKeys.includes(k) && uploads[k]).length
+  const totalDocs = REQUIRED_DOC_COUNT
+  const docLabel = (key: string) => [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find((d) => d.key === key)?.label ?? key
 
   return (
     <>
       <section>
         <SectionHeader>Document Checklist</SectionHeader>
-        <div className="bg-white border border-[#E5E7EB] rounded-sm">
-          {REQUIRED_DOC_DEFS.map(({ key, label }, idx) => {
+        <div className="bg-white border border-[#E5E7EB] rounded-sm divide-y divide-[#E5E7EB]">
+          {/* Required section */}
+          <div className="px-4 py-2 bg-[#F9FAFB] text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]">
+            Required Documents
+          </div>
+          {REQUIRED_DOCS.map(({ key, label }, idx) => {
             const docInfo = uploads[key]
             const fileName = docInfo?.fileName
             const uploadedAt = docInfo?.uploadedAt
-            const comment = docInfo?.comment
             
             return (
               <div
                 key={key}
-                className={`flex items-center gap-3 px-4 py-3 text-sm font-sans ${idx !== REQUIRED_DOC_DEFS.length - 1 ? "border-b border-[#E5E7EB]" : ""}`}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-sans"
               >
                 <span className={`flex-shrink-0 w-4 h-4 ${fileName ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
                   {fileName ? (
@@ -186,18 +193,13 @@ function DocumentPanel({ docState }: { docState: DocState }) {
                   )}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className={fileName ? "text-[#1A1A2E] text-sm" : "text-[#9CA3AF] text-sm"}>{label}</span>
+                  <span className={fileName ? "text-[#1A1A2E] text-sm font-medium" : "text-[#9CA3AF] text-sm"}>{label}</span>
                   {fileName && (
                     <div className="mt-0.5 space-y-0.5">
                       <p className="text-[10px] text-[#9CA3AF] font-mono truncate">{fileName}</p>
                       <p className="text-[9px] text-[#9CA3AF] font-sans">
-                        Uploaded on {new Date(uploadedAt!).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        Uploaded {new Date(uploadedAt!).toLocaleDateString("en-ZA", { day: "numeric", month: "long" })}
                       </p>
-                      {comment && (
-                        <p className="text-[10px] text-[#F5A623] font-sans italic">
-                          " {comment} "
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -206,6 +208,43 @@ function DocumentPanel({ docState }: { docState: DocState }) {
                     Pending
                   </span>
                 )}
+              </div>
+            )
+          })}
+
+          {/* Optional section */}
+          <div className="px-4 py-2 bg-[#F9FAFB] text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] border-t border-[#E5E7EB]">
+            Optional / Supporting
+          </div>
+          {OPTIONAL_DOCS.map(({ key, label }) => {
+            const docInfo = uploads[key]
+            const fileName = docInfo?.fileName
+            const uploadedAt = docInfo?.uploadedAt
+            const comment = docInfo?.comment
+            
+            return (
+              <div key={key} className="flex items-center gap-3 px-4 py-3 text-sm font-sans">
+                <span className={`flex-shrink-0 w-4 h-4 ${fileName ? "text-[#F5A623]" : "text-[#D1D5DB]"}`} aria-hidden="true">
+                  {fileName ? (
+                    <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                      <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 16 16" fill="none" width="16" height="16">
+                      <circle cx="8" cy="8" r="7.5" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <span className={fileName ? "text-[#1A1A2E] text-sm font-medium" : "text-[#9CA3AF] text-sm"}>{label}</span>
+                  {fileName && (
+                    <div className="mt-0.5 space-y-0.5">
+                      <p className="text-[10px] text-[#9CA3AF] font-mono truncate">{fileName}</p>
+                      {comment && <p className="text-[10px] text-[#F5A623] font-sans italic">{comment}</p>}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -236,11 +275,20 @@ function DocumentPanel({ docState }: { docState: DocState }) {
             className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1A1A2E] font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
           >
             <option value="">Choose document…</option>
-            {REQUIRED_DOC_DEFS.map((d) => (
-              <option key={d.key} value={d.key}>
-                {d.label}{uploads[d.key] ? " ✓ (replace)" : ""}
-              </option>
-            ))}
+            <optgroup label="Required Documents">
+              {REQUIRED_DOCS.map((d) => (
+                <option key={d.key} value={d.key}>
+                  {d.label}{uploads[d.key] ? " ✓ (replace)" : ""}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Optional Documents">
+              {OPTIONAL_DOCS.map((d) => (
+                <option key={d.key} value={d.key}>
+                  {d.label}{uploads[d.key] ? " ✓ (replace)" : ""}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
 
@@ -409,30 +457,8 @@ const STUDENT_STATUS_LABEL: Record<string, string> = {
   Rejected: "Rejected",
 }
 
-function ApplicantView({ app, docState, onUpdateApp }: { app: Application; docState: DocState; onUpdateApp: (app: Application) => void }) {
-  const { user, refreshUser } = useAuth()
-  const [newStudentNo, setNewStudentNo] = useState("")
-  const [updating, setUpdating] = useState(false)
-
-  const handleUpdateStudentNo = async () => {
-    if (!newStudentNo.trim() || !user) return
-    setUpdating(true)
-    try {
-      const res = await fetch(`/api/users?id=${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentNo: newStudentNo.trim() })
-      })
-      if (res.ok) {
-        onUpdateApp({ ...app, studentNo: newStudentNo.trim() })
-        await refreshUser()
-        setNewStudentNo("")
-      }
-    } catch {} finally {
-      setUpdating(false)
-    }
-  }
-
+function ApplicantView({ app, docState }: { app: Application; docState: DocState }) {
+  const { uploads } = docState
   const activeStep = stepIndex(app)
   const friendlyStatus = STUDENT_STATUS_LABEL[app.status] ?? app.status
   const isRejected = app.status === "Rejected"
@@ -471,27 +497,7 @@ function ApplicantView({ app, docState, onUpdateApp }: { app: Application; docSt
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
-              {app.studentNo ? (
-                <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo}</p>
-              ) : (
-                <div className="flex items-center gap-2">
-                   <input
-                    type="text"
-                    value={newStudentNo}
-                    onChange={(e) => setNewStudentNo(e.target.value)}
-                    placeholder="Enter No."
-                    className="w-24 bg-white/10 border border-white/20 text-white text-[10px] px-2 py-1 rounded-sm focus:border-[#F5A623] outline-none"
-                    aria-label="Student number"
-                  />
-                  <button
-                    onClick={handleUpdateStudentNo}
-                    disabled={updating || !newStudentNo.trim()}
-                    className="bg-[#F5A623] text-[#1A2B4A] text-[10px] font-bold px-2 py-1 rounded-sm hover:bg-[#D4891A] disabled:opacity-50"
-                  >
-                    {updating ? "..." : "Save"}
-                  </button>
-                </div>
-              )}
+              <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo || "—"}</p>
             </div>
           </div>
         </div>
@@ -597,35 +603,16 @@ interface BursaryHolderViewProps {
   workshops: Workshop[]
   workshopsLoading: boolean
   studentRecord: { disbursed: number; status: string } | null
-  onUpdateApp: (app: Application) => void
 }
 
-function BursaryHolderView({ app, docState, workshops, workshopsLoading, studentRecord, onUpdateApp }: BursaryHolderViewProps) {
-  const { user, refreshUser } = useAuth()
-  const [newStudentNo, setNewStudentNo] = useState("")
-  const [updating, setUpdating] = useState(false)
+function BursaryHolderView({ app, docState, workshops, workshopsLoading, studentRecord }: BursaryHolderViewProps) {
+  const { user } = useAuth()
   const { uploads } = docState
-  const completedDocs = Object.values(uploads).filter(Boolean).length
-  const totalDocs = REQUIRED_DOC_DEFS.length
+  
+  const requiredKeys = REQUIRED_DOCS.map(d => d.key)
+  const completedDocs = Object.keys(uploads).filter(k => requiredKeys.includes(k) && uploads[k]).length
+  const totalDocs = REQUIRED_DOC_COUNT
 
-  const handleUpdateStudentNo = async () => {
-    if (!newStudentNo.trim() || !user) return
-    setUpdating(true)
-    try {
-      const res = await fetch(`/api/users?id=${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentNo: newStudentNo.trim() })
-      })
-      if (res.ok) {
-        onUpdateApp({ ...app, studentNo: newStudentNo.trim() })
-        await refreshUser()
-        setNewStudentNo("")
-      }
-    } catch {} finally {
-      setUpdating(false)
-    }
-  }
 
   const disbursed = studentRecord?.disbursed ?? 0
   const displayStatus = app.status === "Approved"
@@ -669,27 +656,7 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading, student
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
-              {app.studentNo ? (
-                <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo}</p>
-              ) : (
-                <div className="flex items-center gap-2">
-                   <input
-                    type="text"
-                    value={newStudentNo}
-                    onChange={(e) => setNewStudentNo(e.target.value)}
-                    placeholder="Enter No."
-                    className="w-24 bg-white/10 border border-white/20 text-white text-[10px] px-2 py-1 rounded-sm focus:border-[#F5A623] outline-none"
-                    aria-label="Student number"
-                  />
-                  <button
-                    onClick={handleUpdateStudentNo}
-                    disabled={updating || !newStudentNo.trim()}
-                    className="bg-[#F5A623] text-[#1A2B4A] text-[10px] font-bold px-2 py-1 rounded-sm hover:bg-[#D4891A] disabled:opacity-50"
-                  >
-                    {updating ? "..." : "Save"}
-                  </button>
-                </div>
-              )}
+              <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo || "—"}</p>
             </div>
           </div>
         </div>
@@ -701,7 +668,7 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading, student
           { label: "Status", value: displayStatus },
           { label: "Year", value: app.year },
           { label: "Documents", value: `${completedDocs} / ${totalDocs}` },
-          { label: "Workshops", value: `${workshops.filter(w => w.status === "Attended").length} / ${workshops.length}` },
+          { label: "Workshops", value: `${workshops.filter((w: Workshop) => w.status === "Attended").length} / ${workshops.length}` },
         ].map((stat) => (
           <div key={stat.label} className="bg-white border border-[#E5E7EB] rounded-sm px-4 py-3">
             <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans mb-1">{stat.label}</p>
@@ -766,7 +733,7 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading, student
                     <tr><td colSpan={4} className="py-8 text-center text-sm text-[#9CA3AF]">Loading workshops…</td></tr>
                   ) : workshops.length === 0 ? (
                     <tr><td colSpan={4} className="py-8 text-center text-sm text-[#9CA3AF]">No workshops scheduled yet.</td></tr>
-                  ) : workshops.map((ws, idx) => (
+                  ) : workshops.map((ws: Workshop, idx: number) => (
                     <tr key={ws.id} className={`border-b border-[#E5E7EB] last:border-0 ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
                       <td className="px-4 py-3">
                         <p className="font-medium text-[#1A1A2E]">{ws.title}</p>
@@ -920,11 +887,6 @@ export function StudentDashboard() {
 
   const app = selectedApp!
 
-  const handleUpdateApp = (updated: Application) => {
-    setSelectedApp(updated)
-    setApplications(prev => prev.map(a => a.id === updated.id ? updated : a))
-  }
-
   // Wrap the detail view with the selector panel (shown only if multiple applications)
   const withSelector = (children: ReactNode) => (
     <>
@@ -950,11 +912,10 @@ export function StudentDashboard() {
         workshops={workshops}
         workshopsLoading={workshopsLoading}
         studentRecord={studentRecord}
-        onUpdateApp={handleUpdateApp}
       />
     )
   }
 
   // Submitted / Under Review / Rejected → applicant status tracker
-  return withSelector(<ApplicantView app={app} docState={docState} onUpdateApp={handleUpdateApp} />)
+  return withSelector(<ApplicantView app={app} docState={docState} />)
 }

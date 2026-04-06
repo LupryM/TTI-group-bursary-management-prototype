@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getReadyDb } from "@/lib/db"
-import { REQUIRED_DOC_KEYS } from "@/lib/documents"
+import { REQUIRED_DOCS, OPTIONAL_DOCS, REQUIRED_DOC_KEYS } from "@/lib/documents"
+const ALL_DOC_KEYS = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].map(d => d.key)
 
 export const dynamic = "force-dynamic"
 
@@ -20,9 +21,11 @@ export async function GET(request: Request) {
   const rows = result.rows as unknown as { doc_type: string; file_name: string; uploaded_at: string; comment: string }[]
 
   const docs: Record<string, { fileName: string; uploadedAt: string; comment: string } | null> = {}
-  for (const key of REQUIRED_DOC_KEYS) docs[key] = null
+  for (const key of ALL_DOC_KEYS) docs[key] = null
   for (const r of rows) {
-    docs[r.doc_type] = { fileName: r.file_name, uploadedAt: r.uploaded_at, comment: r.comment }
+    if (ALL_DOC_KEYS.includes(r.doc_type)) {
+      docs[r.doc_type] = { fileName: r.file_name, uploadedAt: r.uploaded_at, comment: r.comment }
+    }
   }
 
   return NextResponse.json({ ownerId, docs })
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
   if (!ownerId || !docType || !fileName) {
     return NextResponse.json({ error: "ownerId, docType and fileName are required" }, { status: 400 })
   }
-  if (!REQUIRED_DOC_KEYS.includes(docType)) {
+  if (!ALL_DOC_KEYS.includes(docType)) {
     return NextResponse.json({ error: "Invalid docType" }, { status: 400 })
   }
 
@@ -51,9 +54,10 @@ export async function POST(request: Request) {
 
   // Cascade: if this owner has submitted applications, refresh their
   // docs_complete flag so the admin view stays accurate.
+  const placeholders = REQUIRED_DOC_KEYS.map(() => "?").join(",")
   const countResult = await db.execute({
-    sql: "SELECT COUNT(*) as c FROM student_documents WHERE student_id = ?",
-    args: [ownerId],
+    sql: `SELECT COUNT(*) as c FROM student_documents WHERE student_id = ? AND doc_type IN (${placeholders})`,
+    args: [ownerId, ...REQUIRED_DOC_KEYS],
   })
   const count = Number((countResult.rows[0] as Record<string, unknown>).c)
   const complete = count >= REQUIRED_DOC_KEYS.length ? 1 : 0
@@ -80,9 +84,10 @@ export async function DELETE(request: Request) {
     args: [ownerId, docType],
   })
 
+  const placeholders = REQUIRED_DOC_KEYS.map(() => "?").join(",")
   const countResult = await db.execute({
-    sql: "SELECT COUNT(*) as c FROM student_documents WHERE student_id = ?",
-    args: [ownerId],
+    sql: `SELECT COUNT(*) as c FROM student_documents WHERE student_id = ? AND doc_type IN (${placeholders})`,
+    args: [ownerId, ...REQUIRED_DOC_KEYS],
   })
   const count = Number((countResult.rows[0] as Record<string, unknown>).c)
   const complete = count >= REQUIRED_DOC_KEYS.length ? 1 : 0
