@@ -177,10 +177,11 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
   // Use the funder's id if found, otherwise null (funder not yet assigned or unrecognised)
   const funderId: string | null = funder?.id ?? null
 
-  // Idempotent: skip if a funder_students record already exists for this student
+  // Idempotent: skip if a funder_students record already exists
+  // We check name and programme because student_no might be empty ("") during testing
   const existingResult = await db.execute({
-    sql: "SELECT id FROM funder_students WHERE student_no = ?",
-    args: [app.student_no as string],
+    sql: "SELECT id FROM funder_students WHERE name = ? AND programme = ?",
+    args: [app.student_name as string, app.programme as string],
   })
   if (existingResult.rows.length > 0) return
 
