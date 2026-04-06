@@ -147,7 +147,6 @@ function AdminApplications() {
   const STATUS_TABS: { dbStatus: AppStatus | "All"; label: string }[] = [
     { dbStatus: "All", label: "All" },
     { dbStatus: "Submitted", label: "Pending Review" },
-    { dbStatus: "Under Review", label: "Under Review" },
     { dbStatus: "Approved", label: "Approved" },
     { dbStatus: "Rejected", label: "Rejected" },
   ]
@@ -278,7 +277,7 @@ function AdminApplications() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs text-[#F5A623] font-sans hover:underline">
-                      {app.status === "Approved" || app.status === "Rejected" ? "View" : "Review"}
+                      {app.status === "Submitted" ? "Review" : "View"}
                     </span>
                   </td>
                 </tr>
@@ -390,7 +389,7 @@ function AdminApplications() {
                 <span className={statusBadge(selected.status)}>{adminStatusLabel(selected.status)}</span>
               </div>
 
-              {selected.status !== "Approved" && selected.status !== "Rejected" && (
+              {selected.status === "Submitted" && (
                 <div className="flex gap-2">
                   <button
                     disabled={actionLoading}
@@ -398,13 +397,6 @@ function AdminApplications() {
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {actionLoading ? "Saving…" : "Approve"}
-                  </button>
-                  <button
-                    disabled={actionLoading}
-                    onClick={() => updateStatus(selected.id, "Under Review")}
-                    className="flex-1 py-2.5 text-xs font-semibold font-sans bg-amber-500 text-white hover:bg-amber-600 rounded-sm transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    Flag for Review
                   </button>
                   <button
                     disabled={actionLoading}

@@ -335,38 +335,54 @@ function NoApplicationView({ user }: { user: NonNullable<ReturnType<typeof useAu
 
 // ─── Applicant View (Pending / Under Review) ──────────────────────────────────
 
+// ─── Applicant View (Pending / Rejected) ──────────────────────────────────────
+
 const STEPS = [
-  { label: "Application Submitted", key: "submitted" },
-  { label: "Under Review", key: "review" },
-  { label: "Documents Verified", key: "docs" },
-  { label: "Decision Made", key: "decision" },
+  { label: "Application Received", key: "submitted", desc: "Your application has been received and is in the queue." },
+  { label: "Documents & Verification", key: "docs", desc: "Your ID and submitted documents are being verified." },
+  { label: "Decision Made", key: "decision", desc: "" },
 ]
 
 function stepIndex(app: Application): number {
-  if (app.status === "Approved" || app.status === "Rejected") return 3
-  if (app.idVerified && app.docsComplete) return 2
-  if (app.status === "Under Review") return 1
-  return 0 // Submitted
+  if (app.status === "Approved" || app.status === "Rejected") return 2
+  if (app.idVerified && app.docsComplete) return 1
+  return 0
+}
+
+// Student-friendly status labels
+const STUDENT_STATUS_LABEL: Record<string, string> = {
+  Submitted: "Pending Review",
+  "Under Review": "Pending Review",
+  Approved: "Approved",
+  Rejected: "Rejected",
 }
 
 function ApplicantView({ app, docState }: { app: Application; docState: DocState }) {
   const activeStep = stepIndex(app)
+  const friendlyStatus = STUDENT_STATUS_LABEL[app.status] ?? app.status
+  const isRejected = app.status === "Rejected"
+
+  const bannerMessage = isRejected
+    ? "Unfortunately, your application was not successful. Please contact TTI for more information."
+    : activeStep >= 1
+    ? "Your documents are being verified. You will be notified once a decision has been made."
+    : "Your application has been received and is awaiting review by the TTI team."
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
       {/* Banner */}
-      <section className="bg-[#1A2B4A] text-white mb-8 rounded-sm overflow-hidden">
+      <section className={`${isRejected ? "bg-red-900" : "bg-[#1A2B4A]"} text-white mb-8 rounded-sm overflow-hidden`}>
         <div className="flex items-stretch">
-          <div className="w-1.5 bg-[#F5A623] flex-shrink-0" aria-hidden="true" />
+          <div className={`w-1.5 ${isRejected ? "bg-red-400" : "bg-[#F5A623]"} flex-shrink-0`} aria-hidden="true" />
           <div className="px-6 sm:px-8 py-6 flex-1 min-w-0">
             <p className="text-[10px] tracking-widest uppercase text-white/50 font-sans mb-1">
               Applicant Portal &mdash; 2026 Academic Year
             </p>
             <h1 className="text-xl sm:text-2xl font-serif font-semibold text-white leading-tight">
-              Application in Progress
+              {isRejected ? "Application Unsuccessful" : "Application in Progress"}
             </h1>
             <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl font-sans">
-              Your application is currently <span className="text-[#F5A623] font-medium">{app.status}</span>.
+              {bannerMessage}
             </p>
           </div>
           <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
@@ -393,15 +409,23 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
                   const done = i < activeStep
                   const active = i === activeStep
                   const last = i === STEPS.length - 1
+                  // Last step (Decision Made) — colour by outcome
+                  const isDecision = last
+                  const decisionDone = isDecision && (app.status === "Approved" || app.status === "Rejected")
+                  const decisionColour = app.status === "Rejected" ? "bg-red-500" : "bg-[#F5A623]"
+
                   return (
                     <li key={step.key} className={`flex gap-4 ${last ? "" : "pb-6"}`}>
                       {/* spine */}
                       <div className="flex flex-col items-center">
                         <div className={[
                           "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold font-sans",
-                          done ? "bg-[#F5A623] text-white" : active ? "bg-[#1A2B4A] text-white" : "bg-[#E5E7EB] text-[#9CA3AF]",
+                          decisionDone ? `${decisionColour} text-white`
+                            : done ? "bg-[#F5A623] text-white"
+                            : active ? "bg-[#1A2B4A] text-white"
+                            : "bg-[#E5E7EB] text-[#9CA3AF]",
                         ].join(" ")}>
-                          {done ? (
+                          {(done && !isDecision) || decisionDone ? (
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                               <path d="M2 6.5L4.5 9L10 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
@@ -409,13 +433,21 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
                         </div>
                         {!last && <div className={`w-px flex-1 mt-1 ${done ? "bg-[#F5A623]" : "bg-[#E5E7EB]"}`} />}
                       </div>
-                      {/* label */}
+                      {/* label + desc */}
                       <div className="pt-1 pb-1">
-                        <p className={`text-sm font-semibold font-sans ${active ? "text-[#1A2B4A]" : done ? "text-[#F5A623]" : "text-[#9CA3AF]"}`}>
-                          {step.label}
+                        <p className={`text-sm font-semibold font-sans ${
+                          decisionDone
+                            ? (app.status === "Rejected" ? "text-red-600" : "text-emerald-600")
+                            : active ? "text-[#1A2B4A]"
+                            : done ? "text-[#F5A623]"
+                            : "text-[#9CA3AF]"
+                        }`}>
+                          {isDecision && decisionDone
+                            ? (app.status === "Approved" ? "Approved" : "Not Approved")
+                            : step.label}
                         </p>
-                        {active && (
-                          <p className="text-xs text-[#6B7280] font-sans mt-0.5">Currently at this stage</p>
+                        {active && step.desc && (
+                          <p className="text-xs text-[#6B7280] font-sans mt-0.5">{step.desc}</p>
                         )}
                       </div>
                     </li>
@@ -431,7 +463,7 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
               <div className="bg-white border border-[#E5E7EB] rounded-sm">
                 <div className="grid grid-cols-2 md:grid-cols-3 divide-x divide-y divide-[#E5E7EB]">
                   {[
-                    { label: "Status", value: app.status, badge: true },
+                    { label: "Status", value: friendlyStatus, badge: true },
                     { label: "Institution", value: app.institution },
                     { label: "Programme", value: app.programme },
                     { label: "Year", value: app.year },
@@ -505,8 +537,10 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading, student
               Welcome back, {user?.name.split(" ")[0]}
             </h1>
             <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl font-sans">
-              Your bursary is active and your account is in good standing. Ensure all outstanding documents are submitted before{" "}
-              <span className="text-[#F5A623] font-medium">30 April 2026</span>.
+              {disbursed > 0
+                ? <>Your bursary is active. <span className="text-[#F5A623] font-medium">{formatZAR(disbursed)}</span> has been disbursed to your account.</>
+                : <>Your bursary has been approved and is awaiting payout. Ensure all documents are submitted before <span className="text-[#F5A623] font-medium">30 April 2026</span>.</>
+              }
             </p>
           </div>
           <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
@@ -712,14 +746,12 @@ export function StudentDashboard() {
         setSelectedApp(approved ?? apps[apps.length - 1] ?? null)
         setAppLoading(false)
 
-        // Fetch the funder_students record using the approved app's studentNo —
-        // this is the same value stored during provisioning, so the match is reliable
-        if (approved?.studentNo) {
-          fetch("/api/students")
+        // Fetch the funder_students record directly by owner_id (always present, never empty)
+        if (approved) {
+          fetch(`/api/students?ownerId=${encodeURIComponent(user.id)}`)
             .then((r) => r.json())
             .then((data: FunderStudent[]) => {
-              const match = data.find((s) => s.studentNo === approved.studentNo)
-              if (match) setStudentRecord({ disbursed: match.disbursed, status: match.status })
+              if (data[0]) setStudentRecord({ disbursed: data[0].disbursed, status: data[0].status })
             })
             .catch(() => {})
         }
