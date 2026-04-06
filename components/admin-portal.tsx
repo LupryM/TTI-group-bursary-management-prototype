@@ -76,6 +76,8 @@ function AdminApplications() {
       .then((updated: Application) => {
         setApps((prev) => prev.map((a) => (a.id === id ? updated : a)))
         setSelected((prev) => (prev?.id === id ? updated : prev))
+        // Reset filter to All so the updated application stays visible
+        setFilterStatus("All")
         setActionLoading(false)
         showToast(`Application ${status.toLowerCase()} successfully.`)
       })
@@ -116,7 +118,8 @@ function AdminApplications() {
     const matchSearch =
       a.studentName.toLowerCase().includes(search.toLowerCase()) ||
       a.institution.toLowerCase().includes(search.toLowerCase()) ||
-      a.funder.toLowerCase().includes(search.toLowerCase())
+      a.funder.toLowerCase().includes(search.toLowerCase()) ||
+      (a.refNumber ?? "").toLowerCase().includes(search.toLowerCase())
     const matchStatus = filterStatus === "All" || a.status === filterStatus
     return matchSearch && matchStatus
   })
@@ -191,7 +194,7 @@ function AdminApplications() {
         </svg>
         <input
           className="w-full pl-9 pr-3 py-2 text-sm border border-[#E5E7EB] bg-white font-sans text-[#1A1A2E] outline-none focus:border-[#F5A623] transition-colors rounded-sm placeholder:text-[#9CA3AF]"
-          placeholder="Search by name, institution, funder…"
+          placeholder="Search by name, reference, institution, funder…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search applications"
@@ -204,10 +207,10 @@ function AdminApplications() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Table */}
         <div className="flex-1 min-w-0 bg-white border border-[#E5E7EB] rounded-sm overflow-x-auto">
-          <table className="w-full text-sm font-sans min-w-[700px]" role="table">
+          <table className="w-full text-sm font-sans min-w-[750px]" role="table">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-[#F5F6F8]">
-                {["Student", "Institution / Funder", "Amount", "Docs", "Status", "Action"].map((h) => (
+                {["Ref / Student", "Institution / Funder", "Amount", "Docs", "Status", "Action"].map((h) => (
                   <th key={h} className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-[#9CA3AF] font-semibold">{h}</th>
                 ))}
               </tr>
@@ -225,6 +228,9 @@ function AdminApplications() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-[#1A1A2E]">{app.studentName}</p>
                     <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">{app.studentNo}</p>
+                    {app.refNumber && (
+                      <p className="text-[10px] text-[#F5A623] font-mono mt-0.5 font-semibold">{app.refNumber}</p>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-xs text-[#1A1A2E]">{app.institution}</p>
@@ -268,9 +274,19 @@ function AdminApplications() {
               </button>
             </div>
             <div className="p-5 flex flex-col gap-4">
+              {/* Name + ref at top */}
               <div>
                 <p className="text-base font-semibold text-[#1A1A2E] font-sans">{selected.studentName}</p>
                 <p className="text-xs text-[#9CA3AF] font-mono">{selected.studentNo}</p>
+                {selected.refNumber && (
+                  <div className="mt-1.5 flex items-center gap-1.5 bg-[#F5A623]/10 border border-[#F5A623]/30 rounded-sm px-2.5 py-1">
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <rect x="1" y="1" width="10" height="10" rx="1" stroke="#F5A623" strokeWidth="1.25" />
+                      <path d="M3.5 6h5M3.5 4h5M3.5 8h3" stroke="#F5A623" strokeWidth="1.25" strokeLinecap="round" />
+                    </svg>
+                    <span className="text-[10px] font-mono font-semibold text-[#A06B00]">{selected.refNumber}</span>
+                  </div>
+                )}
               </div>
               {[
                 { label: "Institution", value: selected.institution },
@@ -300,40 +316,38 @@ function AdminApplications() {
                 </div>
               </div>
 
-              {/* Funder / amount assignment for unassigned applications */}
-              {(selected.funder === "Unassigned" || selected.amount === 0) && (
-                <div className="border border-amber-200 bg-amber-50 rounded-sm p-3 flex flex-col gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-700">Assign Funder &amp; Amount</p>
-                  <div>
-                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Funder</label>
-                    <select
-                      value={assignFunder}
-                      onChange={(e) => setAssignFunder(e.target.value)}
-                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
-                    >
-                      <option value="">Select funder…</option>
-                      {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Bursary Amount (ZAR)</label>
-                    <input
-                      type="text"
-                      value={assignAmount}
-                      onChange={(e) => setAssignAmount(e.target.value)}
-                      placeholder="e.g. 45000"
-                      className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans font-mono outline-none focus:border-[#F5A623] rounded-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={saveAssignment}
-                    disabled={actionLoading || (!assignFunder && !assignAmount)}
-                    className="w-full py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
+              {/* Funder / amount assignment — always available */}
+              <div className="border border-[#E5E7EB] bg-[#F5F6F8] rounded-sm p-3 flex flex-col gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Assign Funder &amp; Amount</p>
+                <div>
+                  <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Funder</label>
+                  <select
+                    value={assignFunder}
+                    onChange={(e) => setAssignFunder(e.target.value)}
+                    className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans outline-none focus:border-[#F5A623] rounded-sm appearance-none"
                   >
-                    Save Assignment
-                  </button>
+                    <option value="">{selected.funder && selected.funder !== "Unassigned" ? selected.funder : "Select funder…"}</option>
+                    {FUNDERS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
-              )}
+                <div>
+                  <label className="block text-[10px] text-[#6B7280] mb-1 font-sans">Bursary Amount (ZAR)</label>
+                  <input
+                    type="text"
+                    value={assignAmount}
+                    onChange={(e) => setAssignAmount(e.target.value)}
+                    placeholder={selected.amount ? String(selected.amount) : "e.g. 45000"}
+                    className="w-full border border-[#E5E7EB] bg-white px-2 py-1.5 text-xs font-sans font-mono outline-none focus:border-[#F5A623] rounded-sm"
+                  />
+                </div>
+                <button
+                  onClick={saveAssignment}
+                  disabled={actionLoading || (!assignFunder && !assignAmount)}
+                  className="w-full py-1.5 text-xs font-semibold font-sans bg-[#1A2B4A] text-white hover:bg-[#1A2B4A]/80 rounded-sm transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  {actionLoading ? "Saving…" : "Save Assignment"}
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Status:</span>
@@ -491,86 +505,94 @@ function AdminSkillsTracker() {
 
       {loadingData ? (
         <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">Loading students…</div>
+      ) : filtered.length === 0 ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">No students found.</div>
       ) : (
-      <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-x-auto">
-        <table className="w-full text-sm font-sans min-w-[900px]" role="table">
-          <thead>
-            <tr className="border-b border-[#E5E7EB] bg-[#F5F6F8]">
-              {["Student", "Institution / Funder", "Bursary Amount", "Modules Completed", "Progress", "Action"].map((h) => (
-                <th key={h} className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-[#9CA3AF] font-semibold whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((s, idx) => {
-              const pct = progressPct(s.modules)
-              return (
-                <tr key={s.id} className={`border-b border-[#E5E7EB] last:border-0 align-top ${idx % 2 === 1 ? "bg-[#F5F6F8]" : "bg-white"}`}>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-[#1A1A2E]">{s.name}</p>
-                    <p className="text-xs text-[#9CA3AF] mt-0.5 font-mono">{s.studentNo}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-[#1A1A2E] text-xs leading-snug">{s.institution}</p>
-                    <p className="text-[#6B7280] text-xs mt-0.5">{s.programme}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-[#F5A623] font-mono text-sm">{formatZAR(s.amount)}</p>
-                    <p className="text-[10px] text-[#9CA3AF] mt-0.5 uppercase tracking-wide">per annum</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {s.modules.map((m) => {
-                        const key = `${s.id}:${m.name}`
-                        const loading = togglingKey === key
-                        return (
-                          <button
-                            key={m.name}
-                            onClick={() => toggleModule(s.id, m.name, m.complete)}
-                            disabled={loading}
-                            title={m.complete ? "Click to mark incomplete" : "Click to mark complete"}
-                            className={[
-                              "text-[10px] px-2 py-0.5 rounded-sm font-sans transition-colors cursor-pointer",
-                              loading ? "opacity-50 cursor-wait" : "",
-                              m.complete
-                                ? "bg-[#F5A623]/15 text-[#A06B00] hover:bg-red-100 hover:text-red-600"
-                                : "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB] hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200",
-                            ].join(" ")}
-                          >
-                            {m.name}
-                          </button>
-                        )
-                      })}
+        <div className="flex flex-col gap-5">
+          {filtered.map((s) => {
+            const pct = progressPct(s.modules)
+            const completedCount = s.modules.filter((m) => m.complete).length
+            return (
+              <div key={s.id} className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
+                {/* Student header */}
+                <div className="px-5 py-4 border-b border-[#E5E7EB] bg-[#F5F6F8] flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-[#1A1A2E] text-sm font-sans">{s.name}</p>
+                      <span className="text-[10px] font-mono text-[#9CA3AF]">{s.studentNo}</span>
                     </div>
-                    <p className="text-[10px] text-[#9CA3AF] mt-1.5">Click module to toggle</p>
-                  </td>
-                  <td className="px-4 py-3 w-40">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold text-[#1A1A2E]">{pct}%</span>
-                      <span className="text-[10px] text-[#9CA3AF]">
-                        ({s.modules.filter((m) => m.complete).length}/{s.modules.length})
-                      </span>
+                    <p className="text-xs text-[#6B7280] mt-0.5">{s.institution} &mdash; {s.programme}</p>
+                    <p className="text-xs font-semibold text-[#F5A623] font-mono mt-0.5">{formatZAR(s.amount)} / annum</p>
+                  </div>
+                  <div className="flex-shrink-0 sm:text-right">
+                    <div className="flex sm:justify-end items-center gap-2 mb-1.5">
+                      <span className="text-sm font-semibold text-[#1A1A2E] font-sans">{pct}%</span>
+                      <span className="text-xs text-[#9CA3AF]">({completedCount}/{s.modules.length} modules)</span>
+                      {pct === 100 && (
+                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-sm">All Complete</span>
+                      )}
                     </div>
-                    <div className="h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden w-full">
-                      <div className="h-full bg-[#F5A623] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    <div className="h-2 bg-[#E5E7EB] rounded-full overflow-hidden w-full sm:w-40">
+                      <div
+                        className="h-full bg-[#F5A623] rounded-full transition-all"
+                        style={{ width: `${pct}%` }}
+                        role="progressbar"
+                        aria-valuenow={pct}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      />
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {pct === 100 ? (
-                      <span className="text-xs font-semibold text-emerald-600 font-sans">All Complete</span>
-                    ) : (
-                      <span className="text-xs text-[#9CA3AF] font-sans">{s.modules.length - s.modules.filter(m => m.complete).length} remaining</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                </div>
+
+                {/* Module rows */}
+                <div className="divide-y divide-[#E5E7EB]">
+                  {s.modules.map((m) => {
+                    const key = `${s.id}:${m.name}`
+                    const isToggling = togglingKey === key
+                    return (
+                      <div key={m.name} className="px-5 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                        {/* Status dot */}
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${m.complete ? "bg-emerald-400" : "bg-[#D1D5DB]"}`}
+                          aria-hidden="true"
+                        />
+                        {/* Module name */}
+                        <span className="flex-1 text-sm text-[#1A1A2E] font-sans min-w-0">{m.name}</span>
+                        {/* Status badge */}
+                        <span className={[
+                          "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-sm flex-shrink-0",
+                          m.complete
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB]",
+                        ].join(" ")}>
+                          {m.complete ? "Complete" : "Incomplete"}
+                        </span>
+                        {/* Action button */}
+                        <button
+                          onClick={() => toggleModule(s.id, m.name, m.complete)}
+                          disabled={isToggling}
+                          className={[
+                            "flex-shrink-0 px-3 py-1.5 text-xs font-semibold font-sans rounded-sm border transition-colors cursor-pointer disabled:opacity-50",
+                            m.complete
+                              ? "border-red-200 text-red-600 bg-white hover:bg-red-50"
+                              : "border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50",
+                          ].join(" ")}
+                          aria-label={m.complete ? `Mark ${m.name} incomplete` : `Mark ${m.name} complete`}
+                        >
+                          {isToggling ? "Saving…" : m.complete ? "Mark Incomplete" : "Mark Complete"}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between">
         <p className="text-xs text-[#9CA3AF] font-sans">Showing {filtered.length} of {students.length} enrolled students — 2026 cohort</p>
         <p className="text-xs text-[#9CA3AF] font-sans">Last synced: {new Date().toLocaleDateString("en-ZA")}</p>
       </div>
