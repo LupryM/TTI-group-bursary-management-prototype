@@ -233,8 +233,7 @@ export function ApplicationForm() {
                 Thank you, {form.firstName}
               </h2>
               <p className="text-sm text-[#6B7280] leading-relaxed mb-6 max-w-lg">
-                Your application has been submitted. Our team will review it and contact you within{" "}
-                <span className="font-medium text-[#1A1A2E]">5–7 business days</span>. Quote your reference number in all correspondence.
+                Your application has been submitted. Quote your reference number in all correspondence.
               </p>
               <div className="bg-[#F5F6F8] border border-[#E5E7EB] px-5 py-4 flex items-center justify-between mb-6 rounded-sm">
                 <div>

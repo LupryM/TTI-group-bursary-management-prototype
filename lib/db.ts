@@ -56,7 +56,7 @@ function initSchema(db: Database.Database) {
       year TEXT NOT NULL,
       funder TEXT NOT NULL,
       amount REAL NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Approved', 'Pending', 'Under Review', 'Rejected')),
+      status TEXT NOT NULL DEFAULT 'Submitted',
       submitted_date TEXT NOT NULL,
       id_verified INTEGER NOT NULL DEFAULT 0,
       docs_complete INTEGER NOT NULL DEFAULT 0,
@@ -80,7 +80,7 @@ function initSchema(db: Database.Database) {
       year TEXT NOT NULL,
       amount REAL NOT NULL,
       disbursed REAL NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Approved', 'Pending', 'Under Review', 'Rejected')),
+      status TEXT NOT NULL DEFAULT 'Approved',
       academic_avg REAL NOT NULL DEFAULT 0,
       funder_id TEXT NOT NULL
     );
@@ -134,13 +134,81 @@ function initSchema(db: Database.Database) {
   `)
 
   // ── Migrations for databases created before this schema version ──────────────
-  // ALTER TABLE ignores "duplicate column" errors — safe to run every startup.
   const migrations = [
     "ALTER TABLE users ADD COLUMN id_number TEXT",
   ]
   for (const sql of migrations) {
     try { db.exec(sql) } catch { /* column already exists */ }
   }
+
+  // ── Recreate applications table if it still has the old CHECK constraint ─────
+  // SQLite does not support ALTER TABLE to change constraints, so we recreate.
+  try {
+    const appTable = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='applications'"
+    ).get() as { sql: string } | undefined
+    if (appTable?.sql?.includes("CHECK") && appTable.sql.includes("'Pending'")) {
+      db.pragma("foreign_keys = off")
+      db.exec(`
+        CREATE TABLE applications_new (
+          id TEXT PRIMARY KEY,
+          student_name TEXT NOT NULL,
+          student_no TEXT NOT NULL,
+          institution TEXT NOT NULL,
+          programme TEXT NOT NULL,
+          year TEXT NOT NULL,
+          funder TEXT NOT NULL,
+          amount REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Submitted',
+          submitted_date TEXT NOT NULL,
+          id_verified INTEGER NOT NULL DEFAULT 0,
+          docs_complete INTEGER NOT NULL DEFAULT 0,
+          academic_avg REAL NOT NULL DEFAULT 0,
+          id_number TEXT,
+          email TEXT,
+          phone TEXT,
+          annual_income TEXT,
+          need_statement TEXT,
+          ref_number TEXT,
+          owner_id TEXT
+        );
+        INSERT INTO applications_new SELECT * FROM applications;
+        DROP TABLE applications;
+        ALTER TABLE applications_new RENAME TO applications;
+      `)
+      db.prepare("UPDATE applications SET status = 'Submitted' WHERE status = 'Pending'").run()
+      db.pragma("foreign_keys = on")
+    }
+  } catch { /* already migrated */ }
+
+  // ── Same for funder_students ──────────────────────────────────────────────────
+  try {
+    const fsTable = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='funder_students'"
+    ).get() as { sql: string } | undefined
+    if (fsTable?.sql?.includes("CHECK") && fsTable.sql.includes("'Pending'")) {
+      db.pragma("foreign_keys = off")
+      db.exec(`
+        CREATE TABLE funder_students_new (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          student_no TEXT NOT NULL,
+          institution TEXT NOT NULL,
+          programme TEXT NOT NULL,
+          year TEXT NOT NULL,
+          amount REAL NOT NULL,
+          disbursed REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'Approved',
+          academic_avg REAL NOT NULL DEFAULT 0,
+          funder_id TEXT NOT NULL
+        );
+        INSERT INTO funder_students_new SELECT * FROM funder_students;
+        DROP TABLE funder_students;
+        ALTER TABLE funder_students_new RENAME TO funder_students;
+      `)
+      db.pragma("foreign_keys = on")
+    }
+  } catch { /* already migrated */ }
 }
 
 function seedIfEmpty(db: Database.Database) {
@@ -170,17 +238,17 @@ function seedIfEmpty(db: Database.Database) {
 
   // ── Applications ───────────────────────────────────────────────────────────
   const insertApp = db.prepare(`
-    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, owner_id)
-    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @owner_id)
+    INSERT INTO applications (id, student_name, student_no, institution, programme, year, funder, amount, status, submitted_date, id_verified, docs_complete, academic_avg, owner_id, ref_number)
+    VALUES (@id, @student_name, @student_no, @institution, @programme, @year, @funder, @amount, @status, @submitted_date, @id_verified, @docs_complete, @academic_avg, @owner_id, @ref_number)
   `)
 
   const apps = [
-    { id: "app-001", student_name: "Thandi Mokoena", student_no: "UP22/0045812", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder: "Anglo American plc", amount: 48500, status: "Approved", submitted_date: "12 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 72, owner_id: "student-1" },
-    { id: "app-002", student_name: "Sipho Dlamini", student_no: "WITS21/0033124", institution: "University of the Witwatersrand", programme: "BCom Accounting", year: "2nd Year", funder: "Sasol Bursaries", amount: 42000, status: "Under Review", submitted_date: "18 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 65, owner_id: "student-2" },
-    { id: "app-003", student_name: "Anele Khumalo", student_no: "UCT24/0071203", institution: "University of Cape Town", programme: "BEng Mechanical", year: "1st Year", funder: "Anglo American plc", amount: 55000, status: "Pending", submitted_date: "21 Jan 2026", id_verified: 0, docs_complete: 0, academic_avg: 78, owner_id: null },
-    { id: "app-004", student_name: "Nomvula Zulu", student_no: "UKZN23/0019877", institution: "University of KwaZulu-Natal", programme: "BSocSci Psychology", year: "2nd Year", funder: "Sasol Bursaries", amount: 38000, status: "Approved", submitted_date: "3 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 70, owner_id: null },
-    { id: "app-005", student_name: "Lwazi Motha", student_no: "SU22/0088341", institution: "Stellenbosch University", programme: "BEng Civil", year: "3rd Year", funder: "Anglo American plc", amount: 52000, status: "Rejected", submitted_date: "7 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 48, owner_id: null },
-    { id: "app-006", student_name: "Karabo Sithole", student_no: "TUT23/0041200", institution: "Tshwane University of Technology", programme: "National Diploma IT", year: "1st Year", funder: "Sasol Bursaries", amount: 35000, status: "Pending", submitted_date: "10 Feb 2026", id_verified: 0, docs_complete: 0, academic_avg: 61, owner_id: null },
+    { id: "app-001", student_name: "Thandi Mokoena", student_no: "UP22/0045812", institution: "University of Pretoria", programme: "BSc Computer Science", year: "3rd Year", funder: "Anglo American plc", amount: 48500, status: "Approved", submitted_date: "12 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 72, owner_id: "student-1", ref_number: "TTI-2026-847201" },
+    { id: "app-002", student_name: "Sipho Dlamini", student_no: "WITS21/0033124", institution: "University of the Witwatersrand", programme: "BCom Accounting", year: "2nd Year", funder: "Sasol Bursaries", amount: 42000, status: "Under Review", submitted_date: "18 Jan 2026", id_verified: 1, docs_complete: 0, academic_avg: 65, owner_id: "student-2", ref_number: "TTI-2026-330112" },
+    { id: "app-003", student_name: "Anele Khumalo", student_no: "UCT24/0071203", institution: "University of Cape Town", programme: "BEng Mechanical", year: "1st Year", funder: "Anglo American plc", amount: 55000, status: "Submitted", submitted_date: "21 Jan 2026", id_verified: 0, docs_complete: 0, academic_avg: 78, owner_id: null, ref_number: "TTI-2026-712034" },
+    { id: "app-004", student_name: "Nomvula Zulu", student_no: "UKZN23/0019877", institution: "University of KwaZulu-Natal", programme: "BSocSci Psychology", year: "2nd Year", funder: "Sasol Bursaries", amount: 38000, status: "Approved", submitted_date: "3 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 70, owner_id: null, ref_number: "TTI-2026-198774" },
+    { id: "app-005", student_name: "Lwazi Motha", student_no: "SU22/0088341", institution: "Stellenbosch University", programme: "BEng Civil", year: "3rd Year", funder: "Anglo American plc", amount: 52000, status: "Rejected", submitted_date: "7 Feb 2026", id_verified: 1, docs_complete: 1, academic_avg: 48, owner_id: null, ref_number: "TTI-2026-883415" },
+    { id: "app-006", student_name: "Karabo Sithole", student_no: "TUT23/0041200", institution: "Tshwane University of Technology", programme: "National Diploma IT", year: "1st Year", funder: "Sasol Bursaries", amount: 35000, status: "Submitted", submitted_date: "10 Feb 2026", id_verified: 0, docs_complete: 0, academic_avg: 61, owner_id: null, ref_number: "TTI-2026-412009" },
   ]
 
   const seedApps = db.transaction(() => {

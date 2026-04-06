@@ -126,7 +126,7 @@ function AdminApplications() {
 
   const counts = {
     All: apps.length,
-    Pending: apps.filter((a) => a.status === "Pending").length,
+    Submitted: apps.filter((a) => a.status === "Submitted").length,
     "Under Review": apps.filter((a) => a.status === "Under Review").length,
     Approved: apps.filter((a) => a.status === "Approved").length,
     Rejected: apps.filter((a) => a.status === "Rejected").length,
@@ -164,7 +164,7 @@ function AdminApplications() {
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {(["All", "Pending", "Under Review", "Approved", "Rejected"] as const).map((s) => (
+        {(["All", "Submitted", "Under Review", "Approved", "Rejected"] as const).map((s) => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
@@ -404,6 +404,8 @@ function AdminSkillsTracker() {
   const [search, setSearch] = useState("")
   const [toast, setToast] = useState<string | null>(null)
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
+  const [filterInstitution, setFilterInstitution] = useState("")
+  const [filterCompletion, setFilterCompletion] = useState("")
 
   useEffect(() => {
     fetch("/api/students")
@@ -450,11 +452,21 @@ function AdminSkillsTracker() {
   const totalAmount = students.reduce((a, s) => a + s.amount, 0)
   const totalActive = students.filter((s) => s.status === "Approved").length
 
-  const filtered = students.filter(
-    (s) =>
+  const filtered = students.filter((s) => {
+    const matchSearch =
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.institution.toLowerCase().includes(search.toLowerCase())
-  )
+    const matchInstitution = !filterInstitution || s.institution === filterInstitution
+    const pct = progressPct(s.modules)
+    const matchCompletion =
+      !filterCompletion ||
+      (filterCompletion === "0" && pct === 0) ||
+      (filterCompletion === "incomplete" && pct > 0 && pct < 100) ||
+      (filterCompletion === "100" && pct === 100)
+    return matchSearch && matchInstitution && matchCompletion
+  })
+
+  const institutions = Array.from(new Set(students.map((s) => s.institution))).sort()
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
@@ -488,19 +500,49 @@ function AdminSkillsTracker() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-5 max-w-sm">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        <input
-          className="w-full pl-9 pr-3 py-2 text-sm border border-[#E5E7EB] bg-white font-sans text-[#1A1A2E] outline-none focus:border-[#F5A623] transition-colors rounded-sm placeholder:text-[#9CA3AF]"
-          placeholder="Search students…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search students"
-        />
+      {/* Search and filters */}
+      <div className="mb-5 flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+        <div className="relative flex-1 min-w-0 sm:max-w-sm">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            className="w-full pl-9 pr-3 py-2 text-sm border border-[#E5E7EB] bg-white font-sans text-[#1A1A2E] outline-none focus:border-[#F5A623] transition-colors rounded-sm placeholder:text-[#9CA3AF]"
+            placeholder="Search students…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search students"
+          />
+        </div>
+        <div>
+          <label htmlFor="filter-institution" className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans mb-1 block">Institution</label>
+          <select
+            id="filter-institution"
+            value={filterInstitution}
+            onChange={(e) => setFilterInstitution(e.target.value)}
+            className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+          >
+            <option value="">All institutions</option>
+            {institutions.map((inst) => (
+              <option key={inst} value={inst}>{inst}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="filter-completion" className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans mb-1 block">Completion</label>
+          <select
+            id="filter-completion"
+            value={filterCompletion}
+            onChange={(e) => setFilterCompletion(e.target.value)}
+            className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+          >
+            <option value="">All students</option>
+            <option value="0">Not started</option>
+            <option value="incomplete">In progress</option>
+            <option value="100">All complete</option>
+          </select>
+        </div>
       </div>
 
       {loadingData ? (
@@ -559,29 +601,27 @@ function AdminSkillsTracker() {
                         />
                         {/* Module name */}
                         <span className="flex-1 text-sm text-[#1A1A2E] font-sans min-w-0">{m.name}</span>
-                        {/* Status badge */}
-                        <span className={[
-                          "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-sm flex-shrink-0",
-                          m.complete
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB]",
-                        ].join(" ")}>
-                          {m.complete ? "Complete" : "Incomplete"}
-                        </span>
-                        {/* Action button */}
-                        <button
-                          onClick={() => toggleModule(s.id, m.name, m.complete)}
+                        {/* Status dropdown */}
+                        <select
+                          value={m.complete ? "complete" : "incomplete"}
+                          onChange={(e) => {
+                            const newComplete = e.target.value === "complete"
+                            if (newComplete !== m.complete) {
+                              toggleModule(s.id, m.name, m.complete)
+                            }
+                          }}
                           disabled={isToggling}
-                          className={[
-                            "flex-shrink-0 px-3 py-1.5 text-xs font-semibold font-sans rounded-sm border transition-colors cursor-pointer disabled:opacity-50",
-                            m.complete
-                              ? "border-red-200 text-red-600 bg-white hover:bg-red-50"
-                              : "border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50",
-                          ].join(" ")}
-                          aria-label={m.complete ? `Mark ${m.name} incomplete` : `Mark ${m.name} complete`}
+                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-semibold font-sans rounded-sm border transition-colors appearance-none cursor-pointer disabled:opacity-50 bg-white"
+                          style={{
+                            borderColor: m.complete ? "#86efac" : "#fed7aa",
+                            backgroundColor: m.complete ? "#f0fdf4" : "#fffbeb",
+                            color: m.complete ? "#166534" : "#b45309",
+                          }}
+                          aria-label={`Mark ${m.name} as`}
                         >
-                          {isToggling ? "Saving…" : m.complete ? "Mark Incomplete" : "Mark Complete"}
-                        </button>
+                          <option value="incomplete">Incomplete</option>
+                          <option value="complete">Complete</option>
+                        </select>
                       </div>
                     )
                   })}

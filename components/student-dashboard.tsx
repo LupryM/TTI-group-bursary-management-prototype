@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
@@ -19,7 +19,7 @@ const statusBadge = (variant: string) => {
   const base = "inline-flex items-center px-2.5 py-0.5 text-xs font-semibold tracking-wide font-sans rounded-sm"
   if (variant === "Approved") return `${base} bg-emerald-100 text-emerald-700`
   if (variant === "Under Review") return `${base} bg-amber-100 text-amber-700`
-  if (variant === "Pending") return `${base} bg-[#F5F6F8] text-[#6B7280]`
+  if (variant === "Submitted") return `${base} bg-[#F5F6F8] text-[#6B7280] border border-[#E5E7EB]`
   if (variant === "Rejected") return `${base} bg-red-100 text-red-600`
   if (variant === "gold") return `${base} bg-[#F5A623]/15 text-[#A06B00] font-mono`
   if (variant === "upcoming") return `${base} bg-[#1A2B4A]/8 text-[#1A2B4A]`
@@ -313,7 +313,7 @@ function NoApplicationView({ user }: { user: NonNullable<ReturnType<typeof useAu
           <ol className="space-y-3">
             {[
               "Submit your application with all required documents",
-              "TTI reviews your application (5–7 business days)",
+              "TTI reviews your application",
               "If approved, a funder and bursary amount are assigned",
               "Your student portal unlocks with full bursary details",
             ].map((step, i) => (
@@ -344,7 +344,7 @@ function stepIndex(app: Application): number {
   if (app.status === "Approved" || app.status === "Rejected") return 3
   if (app.idVerified && app.docsComplete) return 2
   if (app.status === "Under Review") return 1
-  return 0
+  return 0 // Submitted
 }
 
 function ApplicantView({ app, docState }: { app: Application; docState: DocState }) {
@@ -364,7 +364,7 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
               Application in Progress
             </h1>
             <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl font-sans">
-              Your application is currently <span className="text-[#F5A623] font-medium">{app.status}</span>. Our team will contact you within 5–7 business days.
+              Your application is currently <span className="text-[#F5A623] font-medium">{app.status}</span>.
             </p>
           </div>
           <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
@@ -434,7 +434,7 @@ function ApplicantView({ app, docState }: { app: Application; docState: DocState
                     { label: "Programme", value: app.programme },
                     { label: "Year", value: app.year },
                     { label: "Submitted", value: app.submittedDate },
-                    { label: "ID Verified", value: app.idVerified ? "Yes" : "Pending" },
+                    { label: "ID Verified", value: app.idVerified ? "Yes" : "Awaiting" },
                   ].map((item) => (
                     <div key={item.label} className="p-4">
                       <p className="text-[10px] font-sans uppercase tracking-widest text-[#9CA3AF] mb-1.5">{item.label}</p>
@@ -502,12 +502,12 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading }: Bursa
           </div>
           <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
             <div className="text-right">
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
-              <p className="text-white font-semibold font-mono text-sm">{app.studentNo || "—"}</p>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Reference</p>
+              <p className="text-[#F5A623] font-semibold font-mono text-sm">{app.refNumber ?? "—"}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Ref</p>
-              <p className="text-[#F5A623] font-semibold font-mono text-sm">{app.refNumber ?? "—"}</p>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Student No.</p>
+              <p className="text-white/80 font-semibold font-mono text-sm">{app.studentNo || "—"}</p>
             </div>
           </div>
         </div>
@@ -614,11 +614,77 @@ function BursaryHolderView({ app, docState, workshops, workshopsLoading }: Bursa
   )
 }
 
+// ─── Application Selector (shown when student has multiple applications) ────────
+
+function ApplicationSelector({
+  applications,
+  selected,
+  onSelect,
+}: {
+  applications: Application[]
+  selected: Application
+  onSelect: (app: Application) => void
+}) {
+  return (
+    <div className="mb-6 bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
+      <div className="px-5 py-2.5 border-b border-[#E5E7EB] bg-[#F5F6F8] flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] font-sans">
+          Your Applications ({applications.length})
+        </span>
+        <Link
+          href="/portal/student/apply"
+          className="text-[10px] font-semibold text-[#F5A623] hover:underline font-sans"
+        >
+          + New Application
+        </Link>
+      </div>
+      <div className="divide-y divide-[#E5E7EB]">
+        {applications.map((app) => {
+          const isSelected = app.id === selected.id
+          return (
+            <button
+              key={app.id}
+              onClick={() => onSelect(app)}
+              className={[
+                "w-full text-left px-5 py-3 flex items-center gap-3 transition-colors",
+                isSelected ? "bg-[#F5A623]/6" : "bg-white hover:bg-[#F5F6F8]",
+              ].join(" ")}
+            >
+              <div className={`w-1 h-8 rounded-full flex-shrink-0 ${isSelected ? "bg-[#F5A623]" : "bg-[#E5E7EB]"}`} aria-hidden="true" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-[#1A1A2E] font-sans">
+                  {app.institution} — {app.programme}
+                </p>
+                <p className="text-[10px] text-[#9CA3AF] font-sans mt-0.5">{app.submittedDate}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[10px] font-semibold font-mono text-[#F5A623]">
+                  {app.refNumber ?? "No Ref"}
+                </p>
+                <span className={[
+                  "text-[10px] font-semibold px-1.5 py-0.5 rounded-sm mt-0.5 inline-block",
+                  app.status === "Approved" ? "bg-emerald-100 text-emerald-700" :
+                  app.status === "Under Review" ? "bg-amber-100 text-amber-700" :
+                  app.status === "Rejected" ? "bg-red-100 text-red-600" :
+                  "bg-[#F5F6F8] text-[#9CA3AF] border border-[#E5E7EB]",
+                ].join(" ")}>
+                  {app.status}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Root export ──────────────────────────────────────────────────────────────
 
 export function StudentDashboard() {
   const { user } = useAuth()
-  const [application, setApplication] = useState<Application | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [appLoading, setAppLoading] = useState(true)
   const [workshops, setWorkshops] = useState<Workshop[]>([])
   const [workshopsLoading, setWorkshopsLoading] = useState(true)
@@ -627,11 +693,13 @@ export function StudentDashboard() {
 
   useEffect(() => {
     if (!user) return
-    // Fetch the live application record linked to this user
     fetch(`/api/applications?ownerId=${encodeURIComponent(user.id)}`)
       .then((r) => r.json())
       .then((apps: Application[]) => {
-        setApplication(apps[0] ?? null)
+        setApplications(apps)
+        // Pre-select: approved app first, otherwise most recent (last in list)
+        const approved = apps.find((a) => a.status === "Approved")
+        setSelectedApp(approved ?? apps[apps.length - 1] ?? null)
         setAppLoading(false)
       })
       .catch(() => setAppLoading(false))
@@ -652,16 +720,34 @@ export function StudentDashboard() {
     )
   }
 
-  // 1. No application at all → prompt them to apply
-  if (!application) {
+  // No application → prompt to apply
+  if (applications.length === 0) {
     return <NoApplicationView user={user} />
   }
 
-  // 2. Approved → full bursary holder portal
-  if (application.status === "Approved") {
-    return (
+  const app = selectedApp!
+
+  // Wrap the detail view with the selector panel (shown only if multiple applications)
+  const withSelector = (children: ReactNode) => (
+    <>
+      {applications.length > 1 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+          <ApplicationSelector
+            applications={applications}
+            selected={app}
+            onSelect={setSelectedApp}
+          />
+        </div>
+      )}
+      {children}
+    </>
+  )
+
+  // Approved → full bursary holder portal
+  if (app.status === "Approved") {
+    return withSelector(
       <BursaryHolderView
-        app={application}
+        app={app}
         docState={docState}
         workshops={workshops}
         workshopsLoading={workshopsLoading}
@@ -669,6 +755,6 @@ export function StudentDashboard() {
     )
   }
 
-  // 3. Pending / Under Review / Rejected → applicant status tracker
-  return <ApplicantView app={application} docState={docState} />
+  // Submitted / Under Review / Rejected → applicant status tracker
+  return withSelector(<ApplicantView app={app} docState={docState} />)
 }

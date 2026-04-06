@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     year: body.year,
     funder: "Unassigned",
     amount: 0,
-    status: "Pending",
+    status: "Submitted",
     submitted_date: submittedDate,
     id_verified: 0,
     docs_complete: docsComplete,
@@ -124,7 +124,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json(toAppJson(updated))
   }
 
-  const valid = ["Approved", "Pending", "Under Review", "Rejected"]
+  const valid = ["Approved", "Submitted", "Under Review", "Rejected"]
   if (!valid.includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 })
   }
