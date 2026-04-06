@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { formatZAR, Workshop, Application } from "@/lib/mock-data"
@@ -253,6 +254,83 @@ function DocumentPanel({ docState }: { docState: DocState }) {
   )
 }
 
+// ─── No Application View (new student, hasn't applied yet) ───────────────────
+
+function NoApplicationView({ user }: { user: NonNullable<ReturnType<typeof useAuth>["user"]> }) {
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
+      {/* Welcome banner */}
+      <section className="bg-[#1A2B4A] text-white mb-8 rounded-sm overflow-hidden">
+        <div className="flex items-stretch">
+          <div className="w-1.5 bg-[#F5A623] flex-shrink-0" aria-hidden="true" />
+          <div className="px-6 sm:px-8 py-6 flex-1 min-w-0">
+            <p className="text-[10px] tracking-widest uppercase text-white/50 font-sans mb-1">
+              Student Portal &mdash; 2026 Academic Year
+            </p>
+            <h1 className="text-xl sm:text-2xl font-serif font-semibold text-white leading-tight">
+              Welcome, {user.name.split(" ")[0]}
+            </h1>
+            <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl font-sans">
+              Your account is set up. The next step is to submit your bursary application.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Apply CTA */}
+      <div className="max-w-xl mx-auto">
+        <div className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden">
+          <div className="px-6 py-3 border-b border-[#E5E7EB] bg-[#F5F6F8] flex items-center gap-3">
+            <span className="w-1 h-4 bg-[#F5A623] flex-shrink-0 rounded-full" aria-hidden="true" />
+            <h2 className="text-[10px] font-semibold uppercase tracking-widest text-[#1A2B4A] font-sans">
+              No Application Found
+            </h2>
+          </div>
+          <div className="p-8 text-center">
+            <div className="w-14 h-14 rounded-full bg-[#F5A623]/10 flex items-center justify-center mx-auto mb-5">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="#F5A623" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-serif font-semibold text-[#1A2B4A] mb-2">
+              Ready to apply for a bursary?
+            </h3>
+            <p className="text-sm text-[#6B7280] font-sans leading-relaxed mb-6 max-w-sm mx-auto">
+              Complete your bursary application to get started. You will need your SA ID number, proof of registration, academic record, and a financial need statement.
+            </p>
+            <Link
+              href="/apply"
+              className="inline-block px-8 py-3 bg-[#F5A623] text-[#1A2B4A] text-sm font-semibold font-sans rounded-sm hover:bg-[#D4891A] hover:text-white transition-colors"
+            >
+              Start Application
+            </Link>
+          </div>
+        </div>
+
+        {/* What to expect */}
+        <div className="mt-6 bg-white border border-[#E5E7EB] rounded-sm p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9CA3AF] font-sans mb-4">What happens next</p>
+          <ol className="space-y-3">
+            {[
+              "Submit your application with all required documents",
+              "TTI reviews your application (5–7 business days)",
+              "If approved, a funder and bursary amount are assigned",
+              "Your student portal unlocks with full bursary details",
+            ].map((step, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm text-[#4B5563] font-sans">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#F5A623]/15 text-[#A06B00] text-[10px] font-bold flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </main>
+  )
+}
+
 // ─── Applicant View (Pending / Under Review) ──────────────────────────────────
 
 const STEPS = [
@@ -269,8 +347,8 @@ function stepIndex(app: Application): number {
   return 0
 }
 
-function ApplicantView({ app, docState }: { app: Application | null; docState: DocState }) {
-  const activeStep = app ? stepIndex(app) : 0
+function ApplicantView({ app, docState }: { app: Application; docState: DocState }) {
+  const activeStep = stepIndex(app)
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
@@ -283,27 +361,22 @@ function ApplicantView({ app, docState }: { app: Application | null; docState: D
               Applicant Portal &mdash; 2026 Academic Year
             </p>
             <h1 className="text-xl sm:text-2xl font-serif font-semibold text-white leading-tight">
-              Application {app ? "in Progress" : "Not Found"}
+              Application in Progress
             </h1>
             <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-xl font-sans">
-              {app
-                ? <>Your application is currently <span className="text-[#F5A623] font-medium">{app.status}</span>. Our team will contact you within 5–7 business days.</>
-                : <>You have not submitted a bursary application yet. Use the <span className="text-[#F5A623] font-medium">Apply</span> link in the navigation to get started.</>
-              }
+              Your application is currently <span className="text-[#F5A623] font-medium">{app.status}</span>. Our team will contact you within 5–7 business days.
             </p>
           </div>
-          {app && (
-            <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
-              <div className="text-right">
-                <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Reference</p>
-                <p className="text-[#F5A623] font-semibold font-mono text-sm">{app.refNumber ?? "—"}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Submitted</p>
-                <p className="text-white font-semibold font-mono text-sm">{app.submittedDate}</p>
-              </div>
+          <div className="flex-shrink-0 hidden sm:flex flex-col items-end justify-center pr-8 gap-3">
+            <div className="text-right">
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Reference</p>
+              <p className="text-[#F5A623] font-semibold font-mono text-sm">{app.refNumber ?? "—"}</p>
             </div>
-          )}
+            <div className="text-right">
+              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">Submitted</p>
+              <p className="text-white font-semibold font-mono text-sm">{app.submittedDate}</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -350,9 +423,8 @@ function ApplicantView({ app, docState }: { app: Application | null; docState: D
             </div>
           </section>
 
-          {/* Application summary if available */}
-          {app && (
-            <section>
+          {/* Application summary */}
+          <section>
               <SectionHeader>Application Summary</SectionHeader>
               <div className="bg-white border border-[#E5E7EB] rounded-sm">
                 <div className="grid grid-cols-2 md:grid-cols-3 divide-x divide-y divide-[#E5E7EB]">
@@ -375,7 +447,6 @@ function ApplicantView({ app, docState }: { app: Application | null; docState: D
                 </div>
               </div>
             </section>
-          )}
         </div>
 
         {/* Right column — document panel */}
@@ -581,8 +652,13 @@ export function StudentDashboard() {
     )
   }
 
-  // Approved students see the full bursary holder view; all others see the applicant view
-  if (application?.status === "Approved") {
+  // 1. No application at all → prompt them to apply
+  if (!application) {
+    return <NoApplicationView user={user} />
+  }
+
+  // 2. Approved → full bursary holder portal
+  if (application.status === "Approved") {
     return (
       <BursaryHolderView
         app={application}
@@ -593,5 +669,6 @@ export function StudentDashboard() {
     )
   }
 
+  // 3. Pending / Under Review / Rejected → applicant status tracker
   return <ApplicantView app={application} docState={docState} />
 }
