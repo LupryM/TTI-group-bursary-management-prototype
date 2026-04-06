@@ -638,6 +638,232 @@ function AdminSkillsTracker() {
   )
 }
 
+// ── Treasury management ───────────────────────────────────────────────────────
+
+function AdminTreasury() {
+  const [students, setStudents] = useState<FunderStudent[]>([])
+  const [loadingData, setLoadingData] = useState(true)
+  const [search, setSearch] = useState("")
+  const [toast, setToast] = useState<string | null>(null)
+  const [disbursedInput, setDisbursedInput] = useState<Record<string, string>>({})
+  const [disbursedLoading, setDisbursedLoading] = useState<string | null>(null)
+  const [filterPayment, setFilterPayment] = useState("")
+
+  useEffect(() => {
+    fetch("/api/students")
+      .then((r) => r.json())
+      .then((data: FunderStudent[]) => {
+        setStudents(data)
+        setLoadingData(false)
+      })
+  }, [])
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  const confirmDisbursement = async (studentId: string) => {
+    const raw = disbursedInput[studentId] ?? ""
+    const amount = parseFloat(raw)
+    if (raw === "" || isNaN(amount) || amount < 0) {
+      showToast("Please enter a valid disbursement amount.")
+      return
+    }
+    setDisbursedLoading(studentId)
+    try {
+      const res = await fetch("/api/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, disbursed: amount }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? { ...s, disbursed: data.disbursed, status: data.status }
+            : s
+        )
+      )
+      setDisbursedInput((prev) => { const n = { ...prev }; delete n[studentId]; return n })
+      showToast(`Disbursement confirmed: ${formatZAR(amount)}`)
+    } catch {
+      showToast("Failed to confirm disbursement. Please try again.")
+    } finally {
+      setDisbursedLoading(null)
+    }
+  }
+
+  const totalDisbursed = students.reduce((a, s) => a + s.disbursed, 0)
+  const pendingPayouts = students.filter(s => s.disbursed === 0).length
+
+  const filtered = students.filter((s) => {
+    const matchSearch =
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.studentNo.toLowerCase().includes(search.toLowerCase())
+    const matchPayment =
+      !filterPayment ||
+      (filterPayment === "awaiting" && s.disbursed === 0) ||
+      (filterPayment === "disbursed" && s.disbursed > 0)
+    return matchSearch && matchPayment
+  })
+
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 font-sans">
+      {toast && (
+        <div role="status" aria-live="polite" className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto z-50 flex items-center gap-2 px-4 py-3 bg-white border border-emerald-300 text-emerald-700 rounded-sm shadow-lg text-sm font-semibold font-sans">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M2 7.5L5.5 11L12 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {toast}
+        </div>
+      )}
+
+      <div className="mb-6">
+        <p className="text-[10px] tracking-widest uppercase text-[#9CA3AF] mb-1">Admin Portal</p>
+        <h1 className="text-2xl font-serif font-semibold text-[#1A2B4A]">Treasury &amp; Payouts</h1>
+        <p className="text-sm text-[#6B7280] mt-1">Manage financial disbursements for all active bursary holders.</p>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 mb-8 border border-[#E5E7EB] bg-white divide-y sm:divide-y-0 sm:divide-x divide-[#E5E7EB] rounded-sm overflow-hidden">
+        <div className="px-5 py-4">
+          <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] mb-1">Total Disbursed</p>
+          <p className="text-xl font-semibold font-serif text-[#F5A623]">{formatZAR(totalDisbursed)}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] mb-1">Students Paid</p>
+          <p className="text-xl font-semibold font-serif text-[#F5A623]">{students.filter(s => s.disbursed > 0).length}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[10px] uppercase tracking-widest text-[#9CA3AF] mb-1">Awaiting Payout</p>
+          <p className="text-xl font-semibold font-serif text-[#1A2B4A]">{pendingPayouts}</p>
+        </div>
+      </div>
+
+      {/* Search and filters */}
+      <div className="mb-5 flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+        <div className="relative flex-1 min-w-0 sm:max-w-sm">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            className="w-full pl-9 pr-3 py-2 text-sm border border-[#E5E7EB] bg-white font-sans text-[#1A1A2E] outline-none focus:border-[#F5A623] transition-colors rounded-sm placeholder:text-[#9CA3AF]"
+            placeholder="Search students…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search students"
+          />
+        </div>
+        <div>
+          <label htmlFor="filter-payment" className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans mb-1 block">Payment</label>
+          <select
+            id="filter-payment"
+            value={filterPayment}
+            onChange={(e) => setFilterPayment(e.target.value)}
+            className="border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+          >
+            <option value="">All statuses</option>
+            <option value="awaiting">Awaiting Payout</option>
+            <option value="disbursed">Disbursed</option>
+          </select>
+        </div>
+      </div>
+
+      {loadingData ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">Loading treasury records…</div>
+      ) : filtered.length === 0 ? (
+        <div className="py-12 text-center text-sm text-[#9CA3AF] font-sans">No records found.</div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {filtered.map((s) => {
+            const isDisbursed = s.disbursed > 0
+            const pct = progressPct(s.modules)
+            return (
+              <div key={s.id} className="bg-white border border-[#E5E7EB] rounded-sm overflow-hidden flex flex-col sm:flex-row">
+                <div className="flex-1 p-5 border-b sm:border-b-0 sm:border-r border-[#E5E7EB]">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <p className="font-semibold text-[#1A1A2E] text-sm font-sans">{s.name}</p>
+                    <span className="text-[10px] font-mono text-[#9CA3AF]">{s.studentNo}</span>
+                    {pct === 100 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-700">All Skills Complete</span>
+                    )}
+                    {isDisbursed ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-700">
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                          <circle cx="5" cy="5" r="4.5" fill="currentColor" opacity="0.2"/>
+                          <path d="M2.5 5.5L4 7L7.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                        </svg>
+                        Disbursed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700">
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                          <circle cx="5" cy="5" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+                          <path d="M5 3v2.5M5 7v.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                        </svg>
+                        Awaiting Payout
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] uppercase tracking-widest text-[#9CA3AF] font-sans">Disbursed</span>
+                    <span className={`text-sm font-semibold font-mono ${isDisbursed ? "text-emerald-600" : "text-amber-600"}`}>
+                      {formatZAR(s.disbursed)}
+                    </span>
+                    <span className="text-[10px] text-[#D1D5DB]">/</span>
+                    <span className="text-sm font-semibold font-mono text-[#F5A623]">{formatZAR(s.amount)}</span>
+                  </div>
+                </div>
+
+                {/* Disbursement Action */}
+                <div className="p-5 flex flex-col justify-center bg-[#F5F6F8] min-w-[280px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280] mb-2.5">Process Payout</p>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max={s.amount}
+                      step="100"
+                      placeholder={isDisbursed ? `Current: ${s.disbursed}` : `Max: ${s.amount}`}
+                      value={disbursedInput[s.id] ?? ""}
+                      onChange={(e) => setDisbursedInput((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                      className="w-full border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-mono rounded-sm outline-none focus:border-[#F5A623] transition-colors"
+                      aria-label={`Disbursement amount for ${s.name}`}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => confirmDisbursement(s.id)}
+                        disabled={disbursedLoading === s.id || !(disbursedInput[s.id] ?? "")}
+                        className="flex-1 py-2 text-xs font-semibold font-sans bg-[#1A2B4A] text-white rounded-sm hover:bg-[#F5A623] hover:text-[#1A2B4A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {disbursedLoading === s.id ? "Saving…" : isDisbursed ? "Update" : "Confirm"}
+                      </button>
+                      {isDisbursed && (
+                        <button
+                          onClick={() => {
+                            setDisbursedInput((prev) => ({ ...prev, [s.id]: "0" }))
+                          }}
+                          className="px-3 py-2 text-xs font-semibold font-sans border border-[#E5E7EB] text-[#9CA3AF] rounded-sm hover:bg-white hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer"
+                          title="Reset disbursement to 0"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </main>
+  )
+}
+
 // ── Funders management ────────────────────────────────────────────────────────
 
 interface FunderRow {
@@ -754,5 +980,6 @@ interface AdminPortalProps {
 export function AdminPortal({ view }: AdminPortalProps) {
   if (view === "applications") return <AdminApplications />
   if (view === "tracker") return <AdminSkillsTracker />
+  if (view === "treasury") return <AdminTreasury />
   return <AdminFunders />
 }

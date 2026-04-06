@@ -10,7 +10,7 @@ import { useAuth, Role } from "@/lib/auth-context"
 
 export type StudentView = "dashboard" | "apply" | "profile"
 export type FunderView = "overview" | "students" | "reports"
-export type AdminView = "applications" | "tracker" | "funders"
+export type AdminView = "applications" | "tracker" | "treasury" | "funders"
 
 export type AnyView = StudentView | FunderView | AdminView
 
@@ -37,6 +37,7 @@ const FUNDER_NAV: NavItem[] = [
 const ADMIN_NAV: NavItem[] = [
   { label: "Applications", href: "/portal/admin/applications", sublabel: "Approvals Queue" },
   { label: "Skills Tracker", href: "/portal/admin/tracker", sublabel: "Progress" },
+  { label: "Treasury", href: "/portal/admin/treasury", sublabel: "Disbursements" },
   { label: "Funders", href: "/portal/admin/funders", sublabel: "Manage" },
 ]
 
