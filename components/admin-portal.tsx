@@ -76,10 +76,6 @@ function AdminApplications() {
     setReviewApp(app)
     setReviewIdVerified(app.idVerified)
     setReviewDocsComplete(app.docsComplete)
-    // Auto-transition Submitted → Under Review so the status tracking reflects active review
-    if (app.status === "Submitted") {
-      updateStatus(app.id, "Under Review")
-    }
   }
 
   const closeReview = () => {
@@ -132,20 +128,25 @@ function AdminApplications() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     })
-      .then((r) => r.json())
-      .then((updated: Application) => {
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((updated: Application & { provisioningError?: string }) => {
         setApps((prev) => prev.map((a) => (a.id === id ? updated : a)))
         setSelected((prev) => (prev?.id === id ? updated : prev))
-        // Reset filter to All so the updated application stays visible
         setFilterStatus("All")
         setActionLoading(false)
-        showToast(
-          status === "Approved"
-            ? "Application approved. Student added to Skills Tracker & Treasury."
-            : `Application ${status.toLowerCase()} successfully.`
-        )
+        if (updated.provisioningError) {
+          showToast("Status updated but student setup failed — check Vercel logs.", "error")
+        } else {
+          showToast(
+            status === "Approved"
+              ? "Application approved. Student added to Skills Tracker & Treasury."
+              : `Application ${status.toLowerCase()} successfully.`
+          )
+        }
         onSuccess?.()
-        // Invalidate Next.js router cache so Skills Tracker & Treasury show fresh data
         if (status === "Approved") router.refresh()
       })
       .catch(() => {
