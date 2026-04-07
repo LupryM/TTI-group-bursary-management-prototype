@@ -2,6 +2,12 @@
 
 A full-stack web application for managing student bursary applications, tracking skills development, and managing funder relationships. Built with Next.js, TypeScript, and SQLite.
 
+## Live Application
+
+**Hosted on Vercel:** [https://placeholder-vercel-link.vercel.app](https://placeholder-vercel-link.vercel.app)
+
+**GitHub Repository (Audit):** [https://github.com/LupryM/TTI-group-bursary-management-prototype](https://github.com/LupryM/TTI-group-bursary-management-prototype)
+
 ## Project Structure
 
 ```
@@ -93,7 +99,13 @@ Admin features:
 4. Verify progress bar updates
 5. Check that completion status persists
 
-## Setup Instructions
+## Quick Start
+
+The application is deployed and accessible at the live link above. No setup required to test the application.
+
+For local development or code audit, follow the setup below.
+
+## Local Setup Instructions
 
 ### Prerequisites
 - Node.js 18+ 
@@ -103,7 +115,7 @@ Admin features:
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/LupryM/TTI-group-bursary-management-prototype.git
 cd tti-group-bursary-management-prototype
 ```
 
@@ -130,23 +142,25 @@ npm start
 
 ### Manual Testing Scenarios
 
+Test on the **live application** or locally by running `npm run dev`.
+
 #### Test 1: Student Dashboard Flow
-1. Go to http://localhost:3000/portal/student/dashboard
+1. Go to `/portal/student/dashboard` (live: append to Vercel link above)
 2. Verify bursary status displays correctly
 3. Verify enrolled workshops appear in list
 4. Test document upload field (should accept file selection)
 5. Check responsiveness on mobile and desktop
 
 #### Test 2: Application Submission
-1. Go to http://localhost:3000/portal/student/apply
+1. Go to `/portal/student/apply`
 2. Leave fields empty and submit - should show validation errors
 3. Fill all fields with valid data
 4. Submit form
 5. Confirm success message with reference number
-6. Check database to verify data was stored
+6. Check admin panel to verify data was stored
 
 #### Test 3: Admin Application Review
-1. Go to http://localhost:3000/portal/admin/applications
+1. Go to `/portal/admin/applications`
 2. Verify list shows submitted applications
 3. Click approve on an application
 4. Verify status updates to "Approved"
@@ -154,7 +168,7 @@ npm start
 6. Verify status updates to "Rejected"
 
 #### Test 4: Skills Progress Tracking
-1. Go to http://localhost:3000/portal/admin/tracker
+1. Go to `/portal/admin/tracker`
 2. Verify all students display with progress bars
 3. Click to mark a module complete
 4. Verify progress bar increases
@@ -162,14 +176,14 @@ npm start
 6. Confirm progress bar reaches 100% when all modules done
 
 #### Test 5: Responsive Design
-1. Open http://localhost:3000/portal/student/dashboard in browser
+1. Open `/portal/student/dashboard` in browser
 2. Test on desktop (1920px width)
 3. Test on tablet (768px width)
 4. Test on mobile (375px width)
 5. Verify all content is accessible and readable
 
 #### Test 6: Form Validation
-1. Go to http://localhost:3000/portal/student/apply
+1. Go to `/portal/student/apply`
 2. Test each field:
    - Name: Try empty, then valid name
    - Student Number: Try invalid format, then valid
@@ -179,14 +193,16 @@ npm start
 
 ### API Testing
 
-Use curl or Postman to test endpoints:
+Use curl or Postman to test endpoints. Replace `BASE_URL` with either:
+- Live: `https://placeholder-vercel-link.vercel.app`
+- Local: `http://localhost:3000`
 
 ```bash
 # Get all applications
-curl http://localhost:3000/api/applications
+curl BASE_URL/api/applications
 
 # Create new application
-curl -X POST http://localhost:3000/api/applications \
+curl -X POST BASE_URL/api/applications \
   -H "Content-Type: application/json" \
   -d '{
     "name": "John Doe",
@@ -196,21 +212,25 @@ curl -X POST http://localhost:3000/api/applications \
   }'
 
 # Get all students
-curl http://localhost:3000/api/students
+curl BASE_URL/api/students
 
 # Get all workshops
-curl http://localhost:3000/api/workshops
+curl BASE_URL/api/workshops
 ```
 
 ## Database
 
-The application uses SQLite database (`tti_bursary.db`) with the following tables:
+The application uses SQLite database with the following tables:
 - `students` - Student records with bursary amounts
 - `applications` - Bursary application submissions
 - `workshops` - Available skills development workshops
 - `enrollments` - Student workshop enrollments
 - `documents` - Document metadata (front-end only)
 - `funders` - Funder organization information
+
+**Live Environment:** Database is hosted and accessible through the deployed application.
+
+**Local Development:** Uses local `tti_bursary.db` file.
 
 ## Technology Stack
 
