@@ -165,11 +165,17 @@ export async function PATCH(request: Request) {
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   // ── Side-effects when transitioning TO Approved ───────────────────────────
+  let provisioningError: string | undefined
   if (status === "Approved" && current.status !== "Approved") {
-    await provisionApprovedStudent(db, current)
+    try {
+      await provisionApprovedStudent(db, current)
+    } catch (err) {
+      console.error("provisionApprovedStudent failed:", err)
+      provisioningError = err instanceof Error ? err.message : String(err)
+    }
   }
 
-  return NextResponse.json(toAppJson(updated))
+  return NextResponse.json({ ...toAppJson(updated), provisioningError })
 }
 
 const DEFAULT_MODULES = [
