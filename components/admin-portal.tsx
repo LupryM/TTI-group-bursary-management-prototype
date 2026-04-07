@@ -71,11 +71,13 @@ function AdminApplications() {
   const [reviewIdVerified, setReviewIdVerified] = useState(false)
   const [reviewDocsComplete, setReviewDocsComplete] = useState(false)
   const [verifyLoading, setVerifyLoading] = useState(false)
+  const [reviewFunder, setReviewFunder] = useState("")
 
   const openReview = (app: Application) => {
     setReviewApp(app)
     setReviewIdVerified(app.idVerified)
     setReviewDocsComplete(app.docsComplete)
+    setReviewFunder(app.funder !== "Unassigned" ? app.funder : "")
   }
 
   const closeReview = () => {
@@ -121,12 +123,14 @@ function AdminApplications() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const updateStatus = (id: string, status: AppStatus, onSuccess?: () => void) => {
+  const updateStatus = (id: string, status: AppStatus, onSuccess?: () => void, funder?: string) => {
     setActionLoading(true)
+    const body: Record<string, unknown> = { id, status }
+    if (funder) body.funder = funder
     fetch("/api/applications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify(body),
     })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -572,17 +576,38 @@ function AdminApplications() {
                 </div>
               </div>
 
-              {/* Section 4: Decision */}
+              {/* Section 4: Funder Assignment */}
+              <div>
+                <SectionHeader>Assign Funder</SectionHeader>
+                <select
+                  value={reviewFunder}
+                  onChange={(e) => setReviewFunder(e.target.value)}
+                  disabled={actionLoading || verifyLoading}
+                  className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+                >
+                  <option value="">Select a funder...</option>
+                  {funders.map((f) => (
+                    <option key={f.id} value={f.name}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Section 5: Decision */}
               <div className="border-t border-[#E5E7EB] pt-4">
                 {(!reviewIdVerified || !reviewDocsComplete) && (
                   <p className="text-[10px] text-[#9CA3AF] font-sans mb-3 text-center tracking-wide">
                     Please verify the ID and documents to enable approval.
                   </p>
                 )}
+                {!reviewFunder && (
+                  <p className="text-[10px] text-[#9CA3AF] font-sans mb-3 text-center tracking-wide">
+                    Please select a funder to enable approval.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <button
-                    disabled={actionLoading || verifyLoading || !reviewIdVerified || !reviewDocsComplete}
-                    onClick={() => updateStatus(reviewApp.id, "Approved", closeReview)}
+                    disabled={actionLoading || verifyLoading || !reviewIdVerified || !reviewDocsComplete || !reviewFunder}
+                    onClick={() => updateStatus(reviewApp.id, "Approved", closeReview, reviewFunder)}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {actionLoading ? "Processing…" : "Approve Application"}
