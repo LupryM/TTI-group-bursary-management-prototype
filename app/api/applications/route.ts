@@ -196,11 +196,8 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
   const funderName = app.funder as string
   const funderResult = await db.execute({ sql: "SELECT id FROM funders WHERE name = ?", args: [funderName] })
   const funder = funderResult.rows[0] as unknown as { id: string } | undefined
-  // Use the funder's id if found, otherwise null (funder not yet assigned or unrecognised)
   const funderId: string | null = funder?.id ?? null
 
-  // Idempotent: skip if a funder_students record already exists
-  // We check name and programme because student_no might be empty ("") during testing
   const existingResult = await db.execute({
     sql: "SELECT id FROM funder_students WHERE name = ? AND programme = ?",
     args: [app.student_name as string, app.programme as string],
@@ -233,8 +230,8 @@ async function provisionApprovedStudent(db: Client, app: Record<string, unknown>
     "write"
   )
 
-  // Generate upcoming workshops if the student has none yet
   const ownerId = app.owner_id as string | null
+  // Here is the "if" — we only create workshops if the application is linked to a User account
   if (ownerId) {
     const wsCountResult = await db.execute({
       sql: "SELECT COUNT(*) as c FROM workshops WHERE student_id = ?",

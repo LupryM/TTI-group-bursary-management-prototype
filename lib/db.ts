@@ -6,49 +6,49 @@ const client = createClient({
 })
 
 export async function getReadyDb() {
-  // Initialize schema if not exists
   await client.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
-      name TEXT,
-      email TEXT UNIQUE,
-      role TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL,
+      avatar TEXT,
       student_no TEXT,
       ref_no TEXT,
       institution TEXT,
       programme TEXT,
       year TEXT,
-      status TEXT,
-      id_number TEXT,
-      avatar TEXT,
       funder_name TEXT,
       bursary_amount REAL,
+      status TEXT,
       company TEXT,
-      bbbee_level TEXT,
+      bbbee_level INTEGER,
       total_budget REAL,
-      department TEXT
+      department TEXT,
+      id_number TEXT,
+      CONSTRAINT users_check_1 CHECK(role IN ('student', 'funder', 'admin'))
     )
   `)
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS applications (
       id TEXT PRIMARY KEY,
-      student_name TEXT,
-      student_no TEXT,
-      institution TEXT,
-      programme TEXT,
-      year TEXT,
-      funder TEXT,
-      amount REAL,
-      status TEXT,
-      submitted_date TEXT,
-      id_verified INTEGER DEFAULT 0,
-      docs_complete INTEGER DEFAULT 0,
-      academic_avg REAL,
+      student_name TEXT NOT NULL,
+      student_no TEXT NOT NULL,
+      institution TEXT NOT NULL,
+      programme TEXT NOT NULL,
+      year TEXT NOT NULL,
+      funder TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT DEFAULT 'Submitted' NOT NULL,
+      submitted_date TEXT NOT NULL,
+      id_verified INTEGER DEFAULT 0 NOT NULL,
+      docs_complete INTEGER DEFAULT 0 NOT NULL,
+      academic_avg REAL DEFAULT 0 NOT NULL,
       id_number TEXT,
       email TEXT,
       phone TEXT,
-      annual_income REAL,
+      annual_income TEXT,
       need_statement TEXT,
       ref_number TEXT,
       owner_id TEXT
@@ -56,85 +56,57 @@ export async function getReadyDb() {
   `)
 
   await client.execute(`
-    CREATE TABLE IF NOT EXISTS application_audit (
-      application_id TEXT,
-      changed_at TEXT,
-      changed_by TEXT,
-      field TEXT,
-      old_value TEXT,
-      new_value TEXT
-    )
-  `)
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS funders (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      company TEXT,
-      bbbee_level TEXT,
-      total_budget REAL
-    )
-  `)
-
-  await client.execute(`
     CREATE TABLE IF NOT EXISTS funder_students (
       id TEXT PRIMARY KEY,
-      name TEXT,
-      student_no TEXT,
-      institution TEXT,
-      programme TEXT,
-      year TEXT,
-      amount REAL,
-      disbursed REAL DEFAULT 0,
-      status TEXT,
-      academic_avg REAL,
+      name TEXT NOT NULL,
+      student_no TEXT NOT NULL,
+      institution TEXT NOT NULL,
+      programme TEXT NOT NULL,
+      year TEXT NOT NULL,
+      amount REAL NOT NULL,
+      disbursed REAL DEFAULT 0 NOT NULL,
+      status TEXT DEFAULT 'Approved' NOT NULL,
+      academic_avg REAL DEFAULT 0 NOT NULL,
       funder_id TEXT,
       owner_id TEXT
     )
   `)
 
-  // Migration: add owner_id to existing funder_students tables that don't have it
-  try {
-    await client.execute(`ALTER TABLE funder_students ADD COLUMN owner_id TEXT`)
-  } catch {
-    // Column already exists — safe to ignore
-  }
-
   await client.execute(`
     CREATE TABLE IF NOT EXISTS student_modules (
-      funder_student_id TEXT,
-      name TEXT,
-      complete INTEGER DEFAULT 0
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      funder_student_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      complete INTEGER DEFAULT 0 NOT NULL,
+      CONSTRAINT fk_student_modules FOREIGN KEY (funder_student_id) REFERENCES funder_students(id) ON DELETE CASCADE
     )
   `)
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS workshops (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT,
-      date TEXT,
-      status TEXT,
-      facilitator TEXT,
-      duration TEXT,
-      student_id TEXT
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL,
+      facilitator TEXT NOT NULL,
+      duration TEXT NOT NULL,
+      student_id TEXT,
+      CONSTRAINT workshops_check_2 CHECK(status IN ('Attended', 'Upcoming', 'Missed'))
     )
   `)
 
   await client.execute(`
-    CREATE TABLE IF NOT EXISTS student_documents (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      student_id TEXT,
-      doc_type TEXT,
-      file_name TEXT,
-      uploaded_at TEXT,
-      comment TEXT,
-      UNIQUE(student_id, doc_type)
+    CREATE TABLE IF NOT EXISTS funders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      email TEXT NOT NULL,
+      budget REAL NOT NULL,
+      students INTEGER DEFAULT 0 NOT NULL,
+      level INTEGER DEFAULT 1 NOT NULL,
+      status TEXT DEFAULT 'Active' NOT NULL
     )
   `)
-
-  // Migrations for student_documents
-  try { await client.execute(`ALTER TABLE student_documents ADD COLUMN comment TEXT`) } catch {}
-  try { await client.execute(`ALTER TABLE student_documents ADD COLUMN doc_type TEXT`) } catch {}
 
   return client
 }
