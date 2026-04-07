@@ -136,7 +136,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json(toAppJson(updatedResult.rows[0] as Record<string, unknown>))
   }
 
-  // Handle funder/amount assignment separately
+  // Handle funder/amount assignment — if status is also present, fall through after updating
   if (body.funder !== undefined || body.amount !== undefined) {
     if (body.funder !== undefined) {
       await db.execute({ sql: auditSql, args: [id, changedAt, changedBy, "funder", String(current.funder ?? ""), String(body.funder)] })
@@ -148,8 +148,13 @@ export async function PATCH(request: Request) {
       await db.execute({ sql: auditSql, args: [id, changedAt, changedBy, "amount", String(current.amount ?? 0), String(amt)] })
       await db.execute({ sql: "UPDATE applications SET amount = ? WHERE id = ?", args: [amt, id] })
     }
-    const updatedResult = await db.execute({ sql: "SELECT * FROM applications WHERE id = ?", args: [id] })
-    return NextResponse.json(toAppJson(updatedResult.rows[0] as Record<string, unknown>))
+    if (!status) {
+      const updatedResult = await db.execute({ sql: "SELECT * FROM applications WHERE id = ?", args: [id] })
+      return NextResponse.json(toAppJson(updatedResult.rows[0] as Record<string, unknown>))
+    }
+    // status also present — re-read current so provisioning sees updated funder
+    const refreshed = await db.execute({ sql: "SELECT * FROM applications WHERE id = ?", args: [id] })
+    Object.assign(current, refreshed.rows[0])
   }
 
   const valid = ["Approved", "Submitted", "Under Review", "Rejected"]
