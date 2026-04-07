@@ -2,12 +2,6 @@
 
 A full-stack web application for managing student bursary applications, tracking skills development, and managing funder relationships. Built with Next.js, TypeScript, and SQLite.
 
-## Live Application
-
-**Hosted on Vercel:** [https://placeholder-vercel-link.vercel.app](https://placeholder-vercel-link.vercel.app)
-
-**GitHub Repository (Audit):** [https://github.com/LupryM/TTI-group-bursary-management-prototype](https://github.com/LupryM/TTI-group-bursary-management-prototype)
-
 ## Project Structure
 
 ```
