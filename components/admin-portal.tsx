@@ -72,12 +72,14 @@ function AdminApplications() {
   const [reviewDocsComplete, setReviewDocsComplete] = useState(false)
   const [verifyLoading, setVerifyLoading] = useState(false)
   const [reviewFunder, setReviewFunder] = useState("")
+  const [reviewAmount, setReviewAmount] = useState("")
 
   const openReview = (app: Application) => {
     setReviewApp(app)
     setReviewIdVerified(app.idVerified)
     setReviewDocsComplete(app.docsComplete)
     setReviewFunder(app.funder !== "Unassigned" ? app.funder : "")
+    setReviewAmount(app.amount ? String(app.amount) : "")
   }
 
   const closeReview = () => {
@@ -123,10 +125,11 @@ function AdminApplications() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const updateStatus = (id: string, status: AppStatus, onSuccess?: () => void, funder?: string) => {
+  const updateStatus = (id: string, status: AppStatus, onSuccess?: () => void, funder?: string, amount?: number) => {
     setActionLoading(true)
     const body: Record<string, unknown> = { id, status }
     if (funder) body.funder = funder
+    if (amount !== undefined && !isNaN(amount)) body.amount = amount
     fetch("/api/applications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -576,20 +579,38 @@ function AdminApplications() {
                 </div>
               </div>
 
-              {/* Section 4: Funder Assignment */}
+              {/* Section 4: Award Details & Funder Assignment */}
               <div>
-                <SectionHeader>Assign Funder</SectionHeader>
-                <select
-                  value={reviewFunder}
-                  onChange={(e) => setReviewFunder(e.target.value)}
-                  disabled={actionLoading || verifyLoading}
-                  className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
-                >
-                  <option value="">Select a funder...</option>
-                  {funders.map((f) => (
-                    <option key={f.id} value={f.name}>{f.name}</option>
-                  ))}
-                </select>
+                <SectionHeader>Award Details &amp; Funder</SectionHeader>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <p className="text-[9px] uppercase tracking-widest text-[#9CA3AF] mb-1.5 font-sans">Assign Funder</p>
+                    <select
+                      value={reviewFunder}
+                      onChange={(e) => setReviewFunder(e.target.value)}
+                      disabled={actionLoading || verifyLoading}
+                      className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm font-sans outline-none focus:border-[#F5A623] transition-colors rounded-sm appearance-none"
+                    >
+                      <option value="">Select a funder...</option>
+                      {funders.map((f) => (
+                        <option key={f.id} value={f.name}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* New Input for Bursary Amount */}
+                  <div className="flex-1">
+                    <p className="text-[9px] uppercase tracking-widest text-[#9CA3AF] mb-1.5 font-sans">Award Amount (ZAR)</p>
+                    <input
+                      type="number"
+                      value={reviewAmount}
+                      onChange={(e) => setReviewAmount(e.target.value)}
+                      disabled={actionLoading || verifyLoading}
+                      placeholder="e.g. 45000"
+                      className="w-full border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm font-sans font-mono outline-none focus:border-[#F5A623] transition-colors rounded-sm"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Section 5: Decision */}
@@ -599,15 +620,15 @@ function AdminApplications() {
                     Please verify the ID and documents to enable approval.
                   </p>
                 )}
-                {!reviewFunder && (
+                {(!reviewFunder || !reviewAmount) && (
                   <p className="text-[10px] text-[#9CA3AF] font-sans mb-3 text-center tracking-wide">
-                    Please select a funder to enable approval.
+                    Please assign a funder and award amount to enable approval.
                   </p>
                 )}
                 <div className="flex gap-2">
                   <button
-                    disabled={actionLoading || verifyLoading || !reviewIdVerified || !reviewDocsComplete || !reviewFunder}
-                    onClick={() => updateStatus(reviewApp.id, "Approved", closeReview, reviewFunder)}
+                    disabled={actionLoading || verifyLoading || !reviewIdVerified || !reviewDocsComplete || !reviewFunder || !reviewAmount}
+                    onClick={() => updateStatus(reviewApp.id, "Approved", closeReview, reviewFunder, parseFloat(reviewAmount))}
                     className="flex-1 py-2.5 text-xs font-semibold font-sans bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {actionLoading ? "Processing…" : "Approve Application"}
